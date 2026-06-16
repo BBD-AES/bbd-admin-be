@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BOJ</title>
+    <style>
+        :root {
+            --bg: #f3f1ec;
+            --card: #fffdf8;
+            --ink: #161a20;
+            --muted: #8a8378;
+            --line: #d9d1c5;
+            --check: #26724f;
+            --pass: #9b6034;
+            --shadow: 0 24px 70px rgba(22, 26, 32, 0.14);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+            letter-spacing: 0;
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        main {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        .app {
+            width: min(680px, 100%);
+            display: grid;
+            gap: 18px;
+        }
+
+        .card {
+            width: 100%;
+            aspect-ratio: 1.62 / 1;
+            min-height: 270px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--card);
+            box-shadow: var(--shadow);
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            user-select: none;
+        }
+
+        .number {
+            font-size: clamp(6.5rem, 21vw, 13rem);
+            line-height: 0.9;
+            font-weight: 950;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .btn {
+            min-width: 92px;
+            min-height: 46px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: var(--card);
+            color: var(--ink);
+            padding: 0 20px;
+            font-weight: 900;
+        }
+
+        .btn.check {
+            color: var(--check);
+        }
+
+        .btn.pass {
+            color: var(--pass);
+        }
+
+        .list {
+            display: none;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: rgba(255, 253, 248, 0.92);
+            padding: 12px;
+        }
+
+        .list.open {
+            display: grid;
+        }
+
+        .item {
+            min-height: 42px;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--card);
+            padding: 8px 10px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .item.solved {
+            border-color: rgba(38, 114, 79, 0.35);
+            color: var(--check);
+        }
+
+        .item input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--check);
+        }
+
+        .state {
+            color: var(--muted);
+            font-size: 0.75rem;
+        }
+
+        .item.solved .state {
+            color: var(--check);
+        }
+
+        @media (max-width: 560px) {
+            main {
+                padding: 18px;
+            }
+
+            .card {
+                min-height: 230px;
+            }
+
+            .buttons {
+                width: 100%;
+            }
+
+            .btn {
+                flex: 1;
+                min-width: 0;
+                padding-inline: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <section class="app">
+        <button class="card" id="card" type="button" aria-label="다음 문제">
+            <span class="number" id="number"></span>
+        </button>
+
+        <div class="buttons">
+            <button class="btn check" id="check" type="button">체크</button>
+            <button class="btn pass" id="pass" type="button">패스</button>
+            <button class="btn" id="toggle-list" type="button">목록</button>
+        </div>
+
+        <div class="list" id="list"></div>
+    </section>
+</main>
+
+<script>
+    const KEY = "boj-random-picker-v1";
+    const PROBLEMS = [
+        1086, 1311, 1600, 1654, 1920, 2098, 2110, 2482, 2805, 4949,
+        7579, 9370, 10816, 11000, 11062, 11657, 11723, 11729, 12015,
+        12456, 12865, 13549, 14464, 14908, 16496, 17404
+    ];
+
+    const state = {
+        problems: [],
+        solved: [],
+        current: null,
+        listOpen: false
+    };
+
+    const numberEl = document.querySelector("#number");
+    const cardEl = document.querySelector("#card");
+    const checkEl = document.querySelector("#check");
+    const passEl = document.querySelector("#pass");
+    const toggleListEl = document.querySelector("#toggle-list");
+    const listEl = document.querySelector("#list");
+
+    function parseProblems(value) {
+        const text = Array.isArray(value) ? value.join("\n") : String(value || "");
+        const matches = text.match(/\d{3,6}/g) || [];
+        return [...new Set(matches.map(Number).filter(Boolean))].sort((a, b) => a - b);
+    }
+
+    function saveState() {
+        localStorage.setItem(KEY, JSON.stringify({
+            problems: state.problems,
+            solved: state.solved,
+            current: state.current,
+            excludeSolved: true
+        }));
+    }
+
+    function loadState() {
+        state.problems = PROBLEMS.slice();
+
+        try {
+            const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+            state.solved = parseProblems(saved.solved);
+        } catch {
+            state.solved = [];
+        }
+
+        state.solved = state.solved.filter(id => state.problems.includes(id));
+    }
+
+    function randomIndex(max) {
+        if (window.crypto && crypto.getRandomValues) {
+            return crypto.getRandomValues(new Uint32Array(1))[0] % max;
+        }
+
+        return Math.floor(Math.random() * max);
+    }
+
+    function remainingProblems() {
+        const solved = new Set(state.solved);
+        return state.problems.filter(id => !solved.has(id));
+    }
+
+    function draw(avoidCurrent = false) {
+        let pool = remainingProblems();
+
+        if (avoidCurrent && pool.length > 1) {
+            pool = pool.filter(id => id !== state.current);
+        }
+
+        if (pool.length === 0) {
+            state.solved = [];
+            pool = state.problems.slice();
+        }
+
+        state.current = pool[randomIndex(pool.length)];
+        saveState();
+        render();
+    }
+
+    function checkCurrent() {
+        if (!state.solved.includes(state.current)) {
+            state.solved.push(state.current);
+        }
+
+        draw(true);
+    }
+
+    function toggleSolved(id, checked) {
+        if (checked && !state.solved.includes(id)) {
+            state.solved.push(id);
+        }
+
+        if (!checked) {
+            state.solved = state.solved.filter(value => value !== id);
+        }
+
+        saveState();
+        render();
+    }
+
+    function render() {
+        const solved = new Set(state.solved);
+        numberEl.textContent = state.current;
+        listEl.classList.toggle("open", state.listOpen);
+        toggleListEl.textContent = state.listOpen ? "닫기" : "목록";
+
+        listEl.textContent = "";
+
+        for (const id of state.problems) {
+            const row = document.createElement("label");
+            row.className = "item";
+            row.classList.toggle("solved", solved.has(id));
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = solved.has(id);
+            checkbox.addEventListener("change", event => toggleSolved(id, event.target.checked));
+
+            const number = document.createElement("span");
+            number.textContent = id;
+
+            const status = document.createElement("span");
+            status.className = "state";
+            status.textContent = solved.has(id) ? "체크" : "";
+
+            row.append(checkbox, number, status);
+            listEl.append(row);
+        }
+    }
+
+    cardEl.addEventListener("click", () => draw(true));
+    checkEl.addEventListener("click", checkCurrent);
+    passEl.addEventListener("click", () => draw(true));
+    toggleListEl.addEventListener("click", () => {
+        state.listOpen = !state.listOpen;
+        render();
+    });
+
+    loadState();
+    draw(true);
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+
+  application:
+    name: hdp
+
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: ${KEYCLOAK_CLIENT_ID:user-admin-console}
+            client-secret: ${KEYCLOAK_CLIENT_SECRET:}
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope:
+              - openid
+              - profile
+              - email
+        provider:
+          keycloak:
+            authorization-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:bbd}/protocol/openid-connect/auth
+            token-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:bbd}/protocol/openid-connect/token
+            jwk-set-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:bbd}/protocol/openid-connect/certs
+            user-info-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:bbd}/protocol/openid-connect/userinfo
+            user-name-attribute: preferred_username
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:bbd}/protocol/openid-connect/certs
+
+server:
+  port: ${SERVER_PORT:8090}
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: ${COOKIE_SECURE:false}
+        same-site: lax
+        path: /
+
+hdp:
+  provisioning:
+    security:
+      enabled: ${HDP_SECURITY_ENABLED:true}
+      enforce-admin-role: ${HDP_ENFORCE_ADMIN_ROLE:false}
+      required-admin-role: ${HDP_REQUIRED_ADMIN_ROLE:admin}
+      post-login-redirect-uri: ${FRONTEND_ORIGIN:http://localhost:5174}
+      post-logout-redirect-uri: ${FRONTEND_ORIGIN:http://localhost:5174}/login
+      allowed-origins:
+        - ${FRONTEND_ORIGIN:http://localhost:5174}
+        - http://localhost:5173
+
+    keycloak:
+      server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
+      realm: ${KEYCLOAK_REALM:bbd}
+      admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:user-admin-console-admin}
+      admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+      token-cache-skew-seconds: ${KEYCLOAK_TOKEN_CACHE_SKEW_SECONDS:30}
+
+    scim:
+      base-url: ${USER_SCIM_BASE_URL:http://localhost:8080/user}
+      auth-mode: ${USER_SCIM_AUTH_MODE:NONE}
+      bearer-token: ${USER_SCIM_BEARER_TOKEN:}
+      basic-username: ${USER_SCIM_BASIC_USERNAME:}
+      basic-password: ${USER_SCIM_BASIC_PASSWORD:}
+      api-key-header: ${USER_SCIM_API_KEY_HEADER:X-API-Key}
+      api-key: ${USER_SCIM_API_KEY:}
+      mtls:
+        key-store: ${USER_SCIM_KEY_STORE:}
+        key-store-password: ${USER_SCIM_KEY_STORE_PASSWORD:}
+        key-store-type: ${USER_SCIM_KEY_STORE_TYPE:PKCS12}
+        trust-store: ${USER_SCIM_TRUST_STORE:}
+        trust-store-password: ${USER_SCIM_TRUST_STORE_PASSWORD:}
+        trust-store-type: ${USER_SCIM_TRUST_STORE_TYPE:PKCS12}
+
+    compensation:
+      create-failure-mode: ${PROVISIONING_CREATE_FAILURE_COMPENSATION:DELETE}
