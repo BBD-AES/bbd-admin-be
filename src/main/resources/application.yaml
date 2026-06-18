@@ -3,7 +3,7 @@ spring:
     import: optional:file:.env[.properties]
 
   application:
-    name: hdp
+    name: bbd-admin-be
 
   security:
     oauth2:
@@ -47,10 +47,12 @@ hdp:
       enforce-admin-role: ${HDP_ENFORCE_ADMIN_ROLE:false}
       required-admin-role: ${HDP_REQUIRED_ADMIN_ROLE:admin}
       post-login-redirect-uri: ${FRONTEND_ORIGIN:http://localhost:5174}
-      post-logout-redirect-uri: ${FRONTEND_ORIGIN:http://localhost:5174}/login
+      post-logout-redirect-uri: ${FRONTEND_ORIGIN:http://localhost:5174}
       allowed-origins:
         - ${FRONTEND_ORIGIN:http://localhost:5174}
         - http://localhost:5173
+        - http://127.0.0.1:5174
+        - http://127.0.0.1:5173
 
     keycloak:
       server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}

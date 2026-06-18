@@ -3,13 +3,10 @@ package com.hd.hdp.provisioning.keycloak;
 import com.hd.hdp.provisioning.config.ProvisioningProperties;
 import com.hd.hdp.provisioning.error.ProvisioningException;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.time.Instant;
@@ -17,15 +14,15 @@ import java.time.Instant;
 @Component
 public class KeycloakAdminTokenClient {
 
-    private final RestClient keycloakRestClient;
+    private final KeycloakTokenHttpService tokenHttpService;
     private final ProvisioningProperties properties;
     private volatile CachedToken cachedToken;
 
     public KeycloakAdminTokenClient(
-            @Qualifier("keycloakRestClient") RestClient keycloakRestClient,
+            KeycloakTokenHttpService tokenHttpService,
             ProvisioningProperties properties
     ) {
-        this.keycloakRestClient = keycloakRestClient;
+        this.tokenHttpService = tokenHttpService;
         this.properties = properties;
     }
 
@@ -52,7 +49,7 @@ public class KeycloakAdminTokenClient {
             throw new ProvisioningException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "KEYCLOAK_ADMIN_CLIENT_SECRET_REQUIRED",
-                    "KEYCLOAK_ADMIN_CLIENT_SECRET 값이 필요합니다."
+                    "KEYCLOAK_ADMIN_CLIENT_SECRET is required."
             );
         }
 
@@ -62,19 +59,13 @@ public class KeycloakAdminTokenClient {
         form.add("client_secret", keycloak.getAdminClientSecret());
 
         try {
-            KeycloakModels.TokenResponse response = keycloakRestClient
-                    .post()
-                    .uri("/realms/{realm}/protocol/openid-connect/token", keycloak.getRealm())
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(form)
-                    .retrieve()
-                    .body(KeycloakModels.TokenResponse.class);
+            KeycloakModels.TokenResponse response = tokenHttpService.requestToken(keycloak.getRealm(), form);
 
             if (response == null || !StringUtils.hasText(response.accessToken())) {
                 throw new ProvisioningException(
                         HttpStatus.BAD_GATEWAY,
                         "KEYCLOAK_TOKEN_EMPTY",
-                        "Keycloak admin access token 응답이 비어 있습니다."
+                        "Keycloak admin access token response was empty."
                 );
             }
 
@@ -85,7 +76,7 @@ public class KeycloakAdminTokenClient {
             throw new ProvisioningException(
                     HttpStatus.BAD_GATEWAY,
                     "KEYCLOAK_TOKEN_REQUEST_FAILED",
-                    "Keycloak admin access token 발급에 실패했습니다. " + upstreamBody(exception),
+                    "Failed to issue Keycloak admin access token. " + upstreamBody(exception),
                     exception
             );
         }

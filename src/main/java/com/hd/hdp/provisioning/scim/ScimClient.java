@@ -2,64 +2,47 @@ package com.hd.hdp.provisioning.scim;
 
 import com.hd.hdp.provisioning.config.ProvisioningProperties;
 import com.hd.hdp.provisioning.error.ProvisioningException;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Component
 public class ScimClient {
 
-    private static final MediaType SCIM_MEDIA_TYPE = MediaType.parseMediaType(ScimModels.MEDIA_TYPE);
-
-    private final RestClient scimRestClient;
+    private final ScimHttpService scimHttpService;
     private final ProvisioningProperties properties;
 
     public ScimClient(
-            @Qualifier("scimRestClient") RestClient scimRestClient,
+            ScimHttpService scimHttpService,
             ProvisioningProperties properties
     ) {
-        this.scimRestClient = scimRestClient;
+        this.scimHttpService = scimHttpService;
         this.properties = properties;
     }
 
     public ScimModels.ScimUserResponse create(ScimModels.ScimUserRequest request) {
         try {
-            return scimRestClient
-                    .post()
-                    .uri("/scim/v2/Users")
-                    .headers(this::applyAuth)
-                    .contentType(SCIM_MEDIA_TYPE)
-                    .accept(SCIM_MEDIA_TYPE, MediaType.APPLICATION_JSON)
-                    .body(request)
-                    .retrieve()
-                    .body(ScimModels.ScimUserResponse.class);
+            return scimHttpService.create(authHeaders(), request);
         } catch (RestClientResponseException exception) {
-            throw upstreamException("SCIM_CREATE_USER_FAILED", "SCIM 사용자 생성에 실패했습니다.", exception);
+            throw upstreamException("SCIM_CREATE_USER_FAILED", "Failed to create SCIM user.", exception);
         }
     }
 
     public Optional<ScimModels.ScimUserResponse> findByExternalId(String externalId) {
         try {
-            ScimModels.ScimListResponse response = scimRestClient
-                    .get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/scim/v2/Users")
-                            .queryParam("filter", "externalId eq \"" + externalId + "\"")
-                            .queryParam("startIndex", 1)
-                            .queryParam("count", 1)
-                            .build())
-                    .headers(this::applyAuth)
-                    .accept(SCIM_MEDIA_TYPE, MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .body(ScimModels.ScimListResponse.class);
+            ScimModels.ScimListResponse response = scimHttpService.search(
+                    authHeaders(),
+                    "externalId eq \"" + externalId + "\"",
+                    1,
+                    1
+            );
 
             if (response == null || response.safeResources().isEmpty()) {
                 return Optional.empty();
@@ -67,52 +50,44 @@ public class ScimClient {
 
             return Optional.of(response.safeResources().get(0));
         } catch (RestClientResponseException exception) {
-            throw upstreamException("SCIM_SEARCH_USER_FAILED", "SCIM 사용자 검색에 실패했습니다.", exception);
+            throw upstreamException("SCIM_SEARCH_USER_FAILED", "Failed to search SCIM user.", exception);
         }
     }
 
     public ScimModels.ScimUserResponse update(String scimUserId, ScimModels.ScimUserRequest request) {
         try {
-            return scimRestClient
-                    .put()
-                    .uri("/scim/v2/Users/{userId}", scimUserId)
-                    .headers(this::applyAuth)
-                    .contentType(SCIM_MEDIA_TYPE)
-                    .accept(SCIM_MEDIA_TYPE, MediaType.APPLICATION_JSON)
-                    .body(request)
-                    .retrieve()
-                    .body(ScimModels.ScimUserResponse.class);
+            return scimHttpService.update(authHeaders(), scimUserId, request);
         } catch (RestClientResponseException exception) {
-            throw upstreamException("SCIM_UPDATE_USER_FAILED", "SCIM 사용자 수정에 실패했습니다.", exception);
+            throw upstreamException("SCIM_UPDATE_USER_FAILED", "Failed to update SCIM user.", exception);
         }
     }
 
     public void deactivate(String scimUserId) {
         try {
-            scimRestClient
-                    .delete()
-                    .uri("/scim/v2/Users/{userId}", scimUserId)
-                    .headers(this::applyAuth)
-                    .retrieve()
-                    .toBodilessEntity();
+            scimHttpService.delete(authHeaders(), scimUserId);
         } catch (RestClientResponseException exception) {
-            throw upstreamException("SCIM_DEACTIVATE_USER_FAILED", "SCIM 사용자 비활성화에 실패했습니다.", exception);
+            throw upstreamException("SCIM_DEACTIVATE_USER_FAILED", "Failed to deactivate SCIM user.", exception);
         }
     }
 
-    private void applyAuth(HttpHeaders headers) {
+    private Map<String, String> authHeaders() {
         ProvisioningProperties.Scim scim = properties.getScim();
+        Map<String, String> headers = new LinkedHashMap<>();
         switch (scim.getAuthMode()) {
-            case BEARER -> headers.setBearerAuth(scim.getBearerToken());
-            case BASIC -> headers.setBasicAuth(
-                    scim.getBasicUsername(),
-                    scim.getBasicPassword(),
-                    StandardCharsets.UTF_8
+            case BEARER -> headers.put(HttpHeaders.AUTHORIZATION, "Bearer " + scim.getBearerToken());
+            case BASIC -> headers.put(
+                    HttpHeaders.AUTHORIZATION,
+                    "Basic " + HttpHeaders.encodeBasicAuth(
+                            scim.getBasicUsername(),
+                            scim.getBasicPassword(),
+                            StandardCharsets.UTF_8
+                    )
             );
-            case API_KEY -> headers.set(scim.getApiKeyHeader(), scim.getApiKey());
+            case API_KEY -> headers.put(scim.getApiKeyHeader(), scim.getApiKey());
             case MTLS, NONE -> {
             }
         }
+        return headers;
     }
 
     private ProvisioningException upstreamException(
@@ -122,8 +97,7 @@ public class ScimClient {
     ) {
         HttpStatus status = switch (exception.getStatusCode().value()) {
             case 400 -> HttpStatus.BAD_REQUEST;
-            case 401 -> HttpStatus.BAD_GATEWAY;
-            case 403 -> HttpStatus.BAD_GATEWAY;
+            case 401, 403 -> HttpStatus.BAD_GATEWAY;
             case 404 -> HttpStatus.NOT_FOUND;
             case 409 -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_GATEWAY;

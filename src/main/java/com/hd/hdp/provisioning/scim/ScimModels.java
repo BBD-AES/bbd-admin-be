@@ -66,15 +66,19 @@ public final class ScimModels {
         }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record ScimName(String formatted) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record ScimEmail(String value, String type, Boolean primary) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record ScimRole(String value, String display, Boolean primary) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record EnterpriseExtension(
             String employeeNumber,
             String organization,
@@ -82,6 +86,7 @@ public final class ScimModels {
     ) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record ErpExtension(
             String role,
             String tenancyType,

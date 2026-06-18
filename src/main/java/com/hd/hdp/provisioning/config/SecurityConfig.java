@@ -8,6 +8,8 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.DefaultRedirectStrategy;
 import org.springframework.security.web.RedirectStrategy;
@@ -85,7 +87,8 @@ public class SecurityConfig {
     SecurityFilterChain webSecurityFilterChain(
             HttpSecurity http,
             CorsConfigurationSource corsConfigurationSource,
-            ProvisioningProperties properties
+            ProvisioningProperties properties,
+            OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService
     ) throws Exception {
         return http
                 .authorizeHttpRequests(auth -> auth
@@ -103,6 +106,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(AbstractHttpConfigurer::disable)
                 .oauth2Login(oauth2 -> oauth2
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .oidcUserService(oidcUserService)
+                        )
                         .successHandler((request, response, authentication) ->
                                 new DefaultRedirectStrategy().sendRedirect(
                                         request,

@@ -1,10 +1,15 @@
 package com.hd.hdp.provisioning.config;
 
+import com.hd.hdp.provisioning.keycloak.KeycloakAdminHttpService;
+import com.hd.hdp.provisioning.keycloak.KeycloakTokenHttpService;
+import com.hd.hdp.provisioning.scim.ScimHttpService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -16,17 +21,30 @@ import java.nio.file.Path;
 import java.security.KeyStore;
 
 @Configuration
-public class RestClientConfig {
+public class HttpServiceConfig {
 
     @Bean
-    RestClient keycloakRestClient(ProvisioningProperties properties) {
+    KeycloakAdminHttpService keycloakAdminHttpService(ProvisioningProperties properties) {
+        return httpService(keycloakRestClient(properties), KeycloakAdminHttpService.class);
+    }
+
+    @Bean
+    KeycloakTokenHttpService keycloakTokenHttpService(ProvisioningProperties properties) {
+        return httpService(keycloakRestClient(properties), KeycloakTokenHttpService.class);
+    }
+
+    @Bean
+    ScimHttpService scimHttpService(ProvisioningProperties properties) {
+        return httpService(scimRestClient(properties), ScimHttpService.class);
+    }
+
+    private RestClient keycloakRestClient(ProvisioningProperties properties) {
         return RestClient.builder()
                 .baseUrl(stripTrailingSlash(properties.getKeycloak().getServerUrl()))
                 .build();
     }
 
-    @Bean
-    RestClient scimRestClient(ProvisioningProperties properties) {
+    private RestClient scimRestClient(ProvisioningProperties properties) {
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl(stripTrailingSlash(properties.getScim().getBaseUrl()));
 
@@ -39,6 +57,13 @@ public class RestClientConfig {
         }
 
         return builder.build();
+    }
+
+    private <T> T httpService(RestClient restClient, Class<T> serviceType) {
+        HttpServiceProxyFactory factory = HttpServiceProxyFactory
+                .builderFor(RestClientAdapter.create(restClient))
+                .build();
+        return factory.createClient(serviceType);
     }
 
     private SSLContext scimSslContext(ProvisioningProperties.Mtls mtls) {
