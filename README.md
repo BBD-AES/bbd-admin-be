@@ -74,7 +74,7 @@ The backend calls:
 /user/scim/v2/Users
 ```
 
-For local development, `USER_SCIM_AUTH_MODE=NONE` is convenient. For integrated environments, use the mode expected by the user service, usually `MTLS`.
+For local development, `USER_SCIM_AUTH_MODE=NONE` is convenient. For integrated environments, use the mode expected by the user service, usually `MTLS` or `CLIENT_CREDENTIALS`.
 
 ## Verification
 

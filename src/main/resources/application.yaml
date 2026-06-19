@@ -44,8 +44,10 @@ hdp:
   provisioning:
     security:
       enabled: ${HDP_SECURITY_ENABLED:true}
-      enforce-admin-role: ${HDP_ENFORCE_ADMIN_ROLE:false}
+      enforce-admin-role: ${HDP_ENFORCE_ADMIN_ROLE:true}
       required-admin-role: ${HDP_REQUIRED_ADMIN_ROLE:admin}
+      admin-denied-login-action: ${HDP_ADMIN_DENIED_LOGIN_ACTION:KEEP_SESSION}
+      expose-access-token: ${HDP_EXPOSE_ACCESS_TOKEN:true}
       post-login-redirect-uri: ${FRONTEND_ORIGIN:http://localhost:5174}
       post-logout-redirect-uri: ${FRONTEND_ORIGIN:http://localhost:5174}
       allowed-origins:
@@ -69,6 +71,9 @@ hdp:
       basic-password: ${USER_SCIM_BASIC_PASSWORD:}
       api-key-header: ${USER_SCIM_API_KEY_HEADER:X-API-Key}
       api-key: ${USER_SCIM_API_KEY:}
+      client-id: ${USER_SCIM_CLIENT_ID:admin-be-scim-client}
+      client-secret: ${USER_SCIM_CLIENT_SECRET:}
+      token-cache-skew-seconds: ${USER_SCIM_TOKEN_CACHE_SKEW_SECONDS:30}
       mtls:
         key-store: ${USER_SCIM_KEY_STORE:}
         key-store-password: ${USER_SCIM_KEY_STORE_PASSWORD:}

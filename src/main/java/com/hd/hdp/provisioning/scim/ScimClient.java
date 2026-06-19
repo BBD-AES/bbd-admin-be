@@ -18,13 +18,16 @@ public class ScimClient {
 
     private final ScimHttpService scimHttpService;
     private final ProvisioningProperties properties;
+    private final ScimClientCredentialsTokenClient tokenClient;
 
     public ScimClient(
             ScimHttpService scimHttpService,
-            ProvisioningProperties properties
+            ProvisioningProperties properties,
+            ScimClientCredentialsTokenClient tokenClient
     ) {
         this.scimHttpService = scimHttpService;
         this.properties = properties;
+        this.tokenClient = tokenClient;
     }
 
     public ScimModels.ScimUserResponse create(ScimModels.ScimUserRequest request) {
@@ -84,6 +87,10 @@ public class ScimClient {
                     )
             );
             case API_KEY -> headers.put(scim.getApiKeyHeader(), scim.getApiKey());
+            case CLIENT_CREDENTIALS -> headers.put(
+                    HttpHeaders.AUTHORIZATION,
+                    "Bearer " + tokenClient.getAccessToken()
+            );
             case MTLS, NONE -> {
             }
         }

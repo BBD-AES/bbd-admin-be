@@ -169,7 +169,8 @@ public class AdminUserProvisioningService {
                         request.position(),
                         request.role().name(),
                         request.tenancyType().name(),
-                        request.tenancyName()
+                        request.tenancyName(),
+                        employmentStatus(request.enabled(), request.sourceActive())
                 ),
                 credentials(request.password(), request.temporaryPassword())
         );
@@ -194,7 +195,8 @@ public class AdminUserProvisioningService {
                         request.position(),
                         request.role().name(),
                         request.tenancyType().name(),
-                        request.tenancyName()
+                        request.tenancyName(),
+                        employmentStatus(request.enabled(), request.sourceActive())
                 ),
                 credentials(request.password(), request.temporaryPassword())
         );
@@ -305,20 +307,32 @@ public class AdminUserProvisioningService {
             String position,
             String role,
             String tenancyType,
-            String tenancyName
+            String tenancyName,
+            String employmentStatus
     ) {
         Map<String, List<String>> attributes = new LinkedHashMap<>();
         if (requestAttributes != null) {
             attributes.putAll(requestAttributes);
         }
         putAttribute(attributes, "displayName", displayName);
+        putAttribute(attributes, "name", displayName);
         putAttribute(attributes, "employee_number", employeeNumber);
         putAttribute(attributes, "employeeNumber", employeeNumber);
         putAttribute(attributes, "position", position);
+        putAttribute(attributes, "role", role);
         putAttribute(attributes, "erpRole", role);
+        putAttribute(attributes, "tenancy_type", tenancyType);
         putAttribute(attributes, "tenancyType", tenancyType);
+        putAttribute(attributes, "tenancy_name", tenancyName);
         putAttribute(attributes, "tenancyName", tenancyName);
+        putAttribute(attributes, "employment_status", employmentStatus);
         return attributes;
+    }
+
+    private String employmentStatus(Boolean enabled, Boolean sourceActive) {
+        return Boolean.FALSE.equals(enabled) || Boolean.FALSE.equals(sourceActive)
+                ? "INACTIVE"
+                : "ACTIVE";
     }
 
     private void putAttribute(Map<String, List<String>> attributes, String key, String value) {

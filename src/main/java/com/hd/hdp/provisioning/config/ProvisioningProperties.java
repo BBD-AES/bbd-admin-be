@@ -142,6 +142,9 @@ public class ProvisioningProperties {
         private String basicPassword = "";
         private String apiKeyHeader = "X-API-Key";
         private String apiKey = "";
+        private String clientId = "";
+        private String clientSecret = "";
+        private long tokenCacheSkewSeconds = 30;
         private final Mtls mtls = new Mtls();
 
         public String getBaseUrl() {
@@ -198,6 +201,30 @@ public class ProvisioningProperties {
 
         public void setApiKey(String apiKey) {
             this.apiKey = apiKey;
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public void setClientId(String clientId) {
+            this.clientId = clientId;
+        }
+
+        public String getClientSecret() {
+            return clientSecret;
+        }
+
+        public void setClientSecret(String clientSecret) {
+            this.clientSecret = clientSecret;
+        }
+
+        public long getTokenCacheSkewSeconds() {
+            return tokenCacheSkewSeconds;
+        }
+
+        public void setTokenCacheSkewSeconds(long tokenCacheSkewSeconds) {
+            this.tokenCacheSkewSeconds = tokenCacheSkewSeconds;
         }
 
         public Mtls getMtls() {
@@ -279,6 +306,7 @@ public class ProvisioningProperties {
         BEARER,
         BASIC,
         API_KEY,
+        CLIENT_CREDENTIALS,
         MTLS
     }
 
