@@ -41,6 +41,7 @@ public final class AdminUserResponses {
             String userName,
             String displayName,
             String employeeNumber,
+            String position,
             String role,
             String tenancyType,
             String tenancyName,

@@ -13,40 +13,34 @@ public final class AdminUserRequests {
     }
 
     public record CreateUserRequest(
-            @NotBlank String username,
             @Email String email,
-            String firstName,
-            String lastName,
-            String displayName,
-            String password,
+            @NotBlank String displayName,
+            @NotBlank String password,
             Boolean temporaryPassword,
             Boolean enabled,
             Boolean emailVerified,
             @NotBlank String employeeNumber,
-            String position,
+            @NotBlank String position,
             @NotNull ProvisioningEnums.UserRole role,
             @NotNull ProvisioningEnums.TenancyType tenancyType,
-            String tenancyName,
+            @NotBlank String tenancyName,
             Boolean sourceActive,
             Map<String, List<String>> attributes
     ) {
     }
 
     public record UpdateUserRequest(
-            @NotBlank String username,
             @Email String email,
-            String firstName,
-            String lastName,
-            String displayName,
+            @NotBlank String displayName,
             String password,
             Boolean temporaryPassword,
             Boolean enabled,
             Boolean emailVerified,
             @NotBlank String employeeNumber,
-            String position,
+            @NotBlank String position,
             @NotNull ProvisioningEnums.UserRole role,
             @NotNull ProvisioningEnums.TenancyType tenancyType,
-            String tenancyName,
+            @NotBlank String tenancyName,
             Boolean sourceActive,
             Map<String, List<String>> attributes
     ) {

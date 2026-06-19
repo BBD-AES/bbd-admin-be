@@ -35,15 +35,16 @@ public class AdminUserProvisioningService {
     }
 
     public AdminUserResponses.ProvisionedUserResponse create(AdminUserRequests.CreateUserRequest request) {
-        KeycloakModels.UserRepresentation keycloakRequest = toKeycloakRequest(request);
+        String username = loginId(request.employeeNumber());
+        KeycloakModels.UserRepresentation keycloakRequest = toKeycloakRequest(request, username);
         String keycloakUserId = keycloakAdminClient.createUser(keycloakRequest);
 
         try {
-            ScimModels.ScimUserResponse scim = scimClient.create(toScimRequest(keycloakUserId, request));
+            ScimModels.ScimUserResponse scim = scimClient.create(toScimRequest(keycloakUserId, request, username));
             return new AdminUserResponses.ProvisionedUserResponse(
                     keycloakUserId,
                     scim == null ? null : scim.id(),
-                    request.username(),
+                    username,
                     request.email(),
                     "CREATED"
             );
@@ -64,10 +65,11 @@ public class AdminUserProvisioningService {
             String keycloakUserId,
             AdminUserRequests.UpdateUserRequest request
     ) {
-        keycloakAdminClient.updateUser(keycloakUserId, toKeycloakRequest(request));
+        String username = loginId(request.employeeNumber());
+        keycloakAdminClient.updateUser(keycloakUserId, toKeycloakRequest(request, username));
 
         try {
-            ScimModels.ScimUserRequest scimRequest = toScimRequest(keycloakUserId, request);
+            ScimModels.ScimUserRequest scimRequest = toScimRequest(keycloakUserId, request, username);
             ScimModels.ScimUserResponse scim = scimClient.findByExternalId(keycloakUserId)
                     .map(existing -> scimClient.update(existing.id(), scimRequest))
                     .orElseGet(() -> scimClient.create(scimRequest));
@@ -75,7 +77,7 @@ public class AdminUserProvisioningService {
             return new AdminUserResponses.ProvisionedUserResponse(
                     keycloakUserId,
                     scim == null ? null : scim.id(),
-                    request.username(),
+                    username,
                     request.email(),
                     "UPDATED"
             );
@@ -148,18 +150,23 @@ public class AdminUserProvisioningService {
         }
     }
 
-    private KeycloakModels.UserRepresentation toKeycloakRequest(AdminUserRequests.CreateUserRequest request) {
+    private KeycloakModels.UserRepresentation toKeycloakRequest(
+            AdminUserRequests.CreateUserRequest request,
+            String username
+    ) {
         return new KeycloakModels.UserRepresentation(
                 null,
-                request.username(),
+                username,
                 request.email(),
-                request.firstName(),
-                request.lastName(),
+                null,
+                null,
                 request.enabled() == null || request.enabled(),
                 Boolean.TRUE.equals(request.emailVerified()),
                 attributes(
                         request.attributes(),
+                        request.displayName(),
                         request.employeeNumber(),
+                        request.position(),
                         request.role().name(),
                         request.tenancyType().name(),
                         request.tenancyName()
@@ -168,18 +175,23 @@ public class AdminUserProvisioningService {
         );
     }
 
-    private KeycloakModels.UserRepresentation toKeycloakRequest(AdminUserRequests.UpdateUserRequest request) {
+    private KeycloakModels.UserRepresentation toKeycloakRequest(
+            AdminUserRequests.UpdateUserRequest request,
+            String username
+    ) {
         return new KeycloakModels.UserRepresentation(
                 null,
-                request.username(),
+                username,
                 request.email(),
-                request.firstName(),
-                request.lastName(),
+                null,
+                null,
                 request.enabled() == null || request.enabled(),
                 Boolean.TRUE.equals(request.emailVerified()),
                 attributes(
                         request.attributes(),
+                        request.displayName(),
                         request.employeeNumber(),
+                        request.position(),
                         request.role().name(),
                         request.tenancyType().name(),
                         request.tenancyName()
@@ -190,14 +202,13 @@ public class AdminUserProvisioningService {
 
     private ScimModels.ScimUserRequest toScimRequest(
             String keycloakUserId,
-            AdminUserRequests.CreateUserRequest request
+            AdminUserRequests.CreateUserRequest request,
+            String username
     ) {
         return scimRequest(
                 keycloakUserId,
-                request.username(),
+                username,
                 request.email(),
-                request.firstName(),
-                request.lastName(),
                 request.displayName(),
                 request.employeeNumber(),
                 request.position(),
@@ -210,14 +221,13 @@ public class AdminUserProvisioningService {
 
     private ScimModels.ScimUserRequest toScimRequest(
             String keycloakUserId,
-            AdminUserRequests.UpdateUserRequest request
+            AdminUserRequests.UpdateUserRequest request,
+            String username
     ) {
         return scimRequest(
                 keycloakUserId,
-                request.username(),
+                username,
                 request.email(),
-                request.firstName(),
-                request.lastName(),
                 request.displayName(),
                 request.employeeNumber(),
                 request.position(),
@@ -232,8 +242,6 @@ public class AdminUserProvisioningService {
             String keycloakUserId,
             String username,
             String email,
-            String firstName,
-            String lastName,
             String requestedDisplayName,
             String employeeNumber,
             String position,
@@ -242,7 +250,7 @@ public class AdminUserProvisioningService {
             String tenancyName,
             Boolean sourceActive
     ) {
-        String displayName = displayName(username, firstName, lastName, requestedDisplayName);
+        String displayName = displayName(username, requestedDisplayName);
         List<ScimModels.ScimEmail> emails = StringUtils.hasText(email)
                 ? List.of(new ScimModels.ScimEmail(email, "work", true))
                 : List.of();
@@ -279,9 +287,22 @@ public class AdminUserProvisioningService {
         ));
     }
 
+    private String loginId(String employeeNumber) {
+        if (!StringUtils.hasText(employeeNumber)) {
+            throw new ProvisioningException(
+                    HttpStatus.BAD_REQUEST,
+                    "LOGIN_ID_REQUIRED",
+                    "사번은 Keycloak 로그인 ID로 사용되므로 필수입니다."
+            );
+        }
+        return employeeNumber.trim();
+    }
+
     private Map<String, List<String>> attributes(
             Map<String, List<String>> requestAttributes,
+            String displayName,
             String employeeNumber,
+            String position,
             String role,
             String tenancyType,
             String tenancyName
@@ -290,7 +311,10 @@ public class AdminUserProvisioningService {
         if (requestAttributes != null) {
             attributes.putAll(requestAttributes);
         }
+        putAttribute(attributes, "displayName", displayName);
+        putAttribute(attributes, "employee_number", employeeNumber);
         putAttribute(attributes, "employeeNumber", employeeNumber);
+        putAttribute(attributes, "position", position);
         putAttribute(attributes, "erpRole", role);
         putAttribute(attributes, "tenancyType", tenancyType);
         putAttribute(attributes, "tenancyName", tenancyName);
@@ -305,24 +329,13 @@ public class AdminUserProvisioningService {
 
     private String displayName(
             String username,
-            String firstName,
-            String lastName,
             String requestedDisplayName
     ) {
         if (StringUtils.hasText(requestedDisplayName)) {
             return requestedDisplayName;
         }
 
-        String fullName = String.join(
-                " ",
-                List.of(nullToBlank(firstName), nullToBlank(lastName))
-        ).trim();
-
-        return StringUtils.hasText(fullName) ? fullName : username;
-    }
-
-    private String nullToBlank(String value) {
-        return value == null ? "" : value;
+        return username;
     }
 
     private AdminUserResponses.KeycloakUserSummary toKeycloakSummary(
@@ -361,6 +374,7 @@ public class AdminUserProvisioningService {
                 scim.userName(),
                 scim.displayName(),
                 employeeNumber,
+                scim.title(),
                 role,
                 tenancyType,
                 tenancyName,
