@@ -32,6 +32,7 @@ public class ProvisioningProperties {
     public static class Security {
         private boolean enabled = true;
         private boolean enforceAdminRole;
+        private boolean exposeAccessToken = true;
         private String requiredAdminRole = "admin";
         private String postLoginRedirectUri = "http://localhost:5174";
         private String postLogoutRedirectUri = "http://localhost:5174/login";
@@ -51,6 +52,14 @@ public class ProvisioningProperties {
 
         public void setEnforceAdminRole(boolean enforceAdminRole) {
             this.enforceAdminRole = enforceAdminRole;
+        }
+
+        public boolean isExposeAccessToken() {
+            return exposeAccessToken;
+        }
+
+        public void setExposeAccessToken(boolean exposeAccessToken) {
+            this.exposeAccessToken = exposeAccessToken;
         }
 
         public String getRequiredAdminRole() {

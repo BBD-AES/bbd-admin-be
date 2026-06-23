@@ -1,9 +1,13 @@
 package com.hd.hdp.provisioning.config;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -20,6 +24,8 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Configuration
@@ -105,6 +111,28 @@ public class SecurityConfig {
                 )
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(AbstractHttpConfigurer::disable)
+                .exceptionHandling(exceptions -> exceptions
+                        .defaultAuthenticationEntryPointFor(
+                                (request, response, exception) -> writeApiError(
+                                        request,
+                                        response,
+                                        HttpStatus.UNAUTHORIZED,
+                                        "UNAUTHENTICATED",
+                                        "로그인이 필요합니다."
+                                ),
+                                request -> request.getRequestURI().startsWith("/api/")
+                        )
+                        .defaultAccessDeniedHandlerFor(
+                                (request, response, exception) -> writeApiError(
+                                        request,
+                                        response,
+                                        HttpStatus.FORBIDDEN,
+                                        "ACCESS_DENIED",
+                                        "접근 권한이 없습니다."
+                                ),
+                                request -> request.getRequestURI().startsWith("/api/")
+                        )
+                )
                 .oauth2Login(oauth2 -> oauth2
                         .userInfoEndpoint(userInfo -> userInfo
                                 .oidcUserService(oidcUserService)
@@ -172,5 +200,36 @@ public class SecurityConfig {
             RedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
             redirectStrategy.sendRedirect(request, response, builder.build().toUriString());
         };
+    }
+
+    private static void writeApiError(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            HttpStatus status,
+            String code,
+            String message
+    ) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
+
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.getWriter().write("""
+                {"status":%d,"error":"%s","code":"%s","message":"%s","path":"%s","details":[]}
+                """.formatted(
+                status.value(),
+                escapeJson(status.getReasonPhrase()),
+                escapeJson(code),
+                escapeJson(message),
+                escapeJson(request.getRequestURI())
+        ));
+    }
+
+    private static String escapeJson(String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 }

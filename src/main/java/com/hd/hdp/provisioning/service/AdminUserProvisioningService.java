@@ -13,9 +13,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class AdminUserProvisioningService {
@@ -35,6 +37,7 @@ public class AdminUserProvisioningService {
     }
 
     public AdminUserResponses.ProvisionedUserResponse create(AdminUserRequests.CreateUserRequest request) {
+        validatePasswordPolicy(request.password());
         String username = loginId(request.employeeNumber());
         KeycloakModels.UserRepresentation keycloakRequest = toKeycloakRequest(request, username);
         String keycloakUserId = keycloakAdminClient.createUser(keycloakRequest);
@@ -61,10 +64,44 @@ public class AdminUserProvisioningService {
         }
     }
 
+    public AdminUserResponses.BulkProvisionedUsersResponse createBulk(
+            AdminUserRequests.BulkCreateUsersRequest request
+    ) {
+        List<AdminUserRequests.CreateUserRequest> users = request.users();
+        validateBulkUsers(users);
+
+        List<AdminUserResponses.ProvisionedUserResponse> created = new ArrayList<>();
+        try {
+            for (AdminUserRequests.CreateUserRequest user : users) {
+                created.add(create(user));
+            }
+
+            return new AdminUserResponses.BulkProvisionedUsersResponse(
+                    users.size(),
+                    created,
+                    "CREATED"
+            );
+        } catch (RuntimeException exception) {
+            String rollback = compensateBulkCreatedUsers(created);
+            throw new ProvisioningException(
+                    exception instanceof ProvisioningException provisioningException
+                            ? provisioningException.getStatus()
+                            : HttpStatus.BAD_GATEWAY,
+                    "BULK_CREATE_FAILED_ROLLED_BACK",
+                    "대량 직원 추가 중 실패해 이미 생성된 직원을 롤백했습니다. rollback=" + rollback
+                            + ", cause=" + exception.getMessage(),
+                    exception
+            );
+        }
+    }
+
     public AdminUserResponses.ProvisionedUserResponse update(
             String keycloakUserId,
             AdminUserRequests.UpdateUserRequest request
     ) {
+        if (StringUtils.hasText(request.password())) {
+            validatePasswordPolicy(request.password());
+        }
         String username = loginId(request.employeeNumber());
         keycloakAdminClient.updateUser(keycloakUserId, toKeycloakRequest(request, username));
 
@@ -148,6 +185,82 @@ public class AdminUserProvisioningService {
         } catch (ProvisioningException compensationException) {
             return "FAILED:" + compensationException.getMessage();
         }
+    }
+
+    private void validateBulkUsers(List<AdminUserRequests.CreateUserRequest> users) {
+        Set<String> employeeNumbers = new LinkedHashSet<>();
+        List<String> duplicates = new ArrayList<>();
+
+        for (AdminUserRequests.CreateUserRequest user : users) {
+            if (user == null || !StringUtils.hasText(user.employeeNumber())) {
+                continue;
+            }
+            String employeeNumber = user.employeeNumber().trim();
+            if (!employeeNumbers.add(employeeNumber)) {
+                duplicates.add(employeeNumber);
+            }
+            validatePasswordPolicy(user.password());
+        }
+
+        if (!duplicates.isEmpty()) {
+            throw new ProvisioningException(
+                    HttpStatus.BAD_REQUEST,
+                    "BULK_DUPLICATE_EMPLOYEE_NUMBER",
+                    "대량 추가 목록에 중복 사번이 있습니다: " + String.join(", ", duplicates)
+            );
+        }
+    }
+
+    private void validatePasswordPolicy(String password) {
+        List<String> violations = new ArrayList<>();
+        String value = password == null ? "" : password.trim();
+
+        if (value.length() < 8) {
+            violations.add("8자 이상");
+        }
+        if (!value.matches(".*\\d.*")) {
+            violations.add("숫자 1개 이상");
+        }
+        if (!value.matches(".*[A-Za-z].*")) {
+            violations.add("영문 1개 이상");
+        }
+
+        if (!violations.isEmpty()) {
+            throw new ProvisioningException(
+                    HttpStatus.BAD_REQUEST,
+                    "PASSWORD_POLICY_VIOLATION",
+                    "비밀번호 정책을 만족하지 않습니다: " + String.join(", ", violations)
+            );
+        }
+    }
+
+    private String compensateBulkCreatedUsers(
+            List<AdminUserResponses.ProvisionedUserResponse> created
+    ) {
+        if (created.isEmpty()) {
+            return "NONE";
+        }
+
+        List<String> results = new ArrayList<>();
+        for (int index = created.size() - 1; index >= 0; index--) {
+            AdminUserResponses.ProvisionedUserResponse user = created.get(index);
+            String username = user.username() == null ? "-" : user.username();
+
+            if (StringUtils.hasText(user.scimUserId())) {
+                try {
+                    scimClient.deactivate(user.scimUserId());
+                    results.add(username + ":SCIM_DEACTIVATED");
+                } catch (ProvisioningException exception) {
+                    results.add(username + ":SCIM_ROLLBACK_FAILED:" + exception.getCode());
+                }
+            }
+
+            if (StringUtils.hasText(user.keycloakUserId())) {
+                results.add(username + ":KEYCLOAK_" + compensateCreatedKeycloakUser(user.keycloakUserId()));
+            }
+        }
+
+        return String.join("; ", results);
     }
 
     private KeycloakModels.UserRepresentation toKeycloakRequest(
@@ -370,9 +483,7 @@ public class AdminUserProvisioningService {
         );
     }
 
-    private AdminUserResponses.ScimUserSummary toScimSummary(
-            ScimModels.ScimUserResponse scim
-    ) {
+    private AdminUserResponses.ScimUserSummary toScimSummary(ScimModels.ScimUserResponse scim) {
         if (scim == null) {
             return null;
         }

@@ -42,6 +42,15 @@ public class AdminUserController {
         return provisioningService.create(request);
     }
 
+    @PostMapping("/bulk")
+    AdminUserResponses.BulkProvisionedUsersResponse createBulk(
+            @Valid @RequestBody AdminUserRequests.BulkCreateUsersRequest request,
+            Authentication authentication
+    ) {
+        adminAuthorizationService.requireAdmin(authentication);
+        return provisioningService.createBulk(request);
+    }
+
     @GetMapping
     List<AdminUserResponses.KeycloakUserSummary> search(
             @RequestParam(required = false) String search,
@@ -53,7 +62,7 @@ public class AdminUserController {
         return provisioningService.search(search, first, max);
     }
 
-    @GetMapping("/{keycloakUserId}")
+    @GetMapping("/{keycloakUserId:[0-9a-fA-F-]{36}}")
     AdminUserResponses.AdminUserDetailResponse get(
             @PathVariable String keycloakUserId,
             Authentication authentication
@@ -62,7 +71,7 @@ public class AdminUserController {
         return provisioningService.get(keycloakUserId);
     }
 
-    @PutMapping("/{keycloakUserId}")
+    @PutMapping("/{keycloakUserId:[0-9a-fA-F-]{36}}")
     AdminUserResponses.ProvisionedUserResponse update(
             @PathVariable String keycloakUserId,
             @Valid @RequestBody AdminUserRequests.UpdateUserRequest request,
@@ -72,7 +81,7 @@ public class AdminUserController {
         return provisioningService.update(keycloakUserId, request);
     }
 
-    @DeleteMapping("/{keycloakUserId}")
+    @DeleteMapping("/{keycloakUserId:[0-9a-fA-F-]{36}}")
     AdminUserResponses.ProvisionedUserResponse deactivate(
             @PathVariable String keycloakUserId,
             Authentication authentication

@@ -48,4 +48,11 @@ public final class AdminUserResponses {
             Boolean active
     ) {
     }
+
+    public record BulkProvisionedUsersResponse(
+            int requested,
+            List<ProvisionedUserResponse> users,
+            String result
+    ) {
+    }
 }
