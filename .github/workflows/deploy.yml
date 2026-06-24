@@ -29,9 +29,6 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/bbd-admin-be:latest
-          build-args: |
-            GITHUB_USERNAME=${{ secrets.GH_PACKAGES_USERNAME }}
-            GITHUB_TOKEN=${{ secrets.GH_PACKAGES_TOKEN }}
 
       - name: Deploy to EC2
         run: |
