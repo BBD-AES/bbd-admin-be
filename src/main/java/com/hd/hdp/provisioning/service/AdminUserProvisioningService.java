@@ -22,6 +22,8 @@ import java.util.Set;
 @Service
 public class AdminUserProvisioningService {
 
+    private static final String CONFIGURE_TOTP_REQUIRED_ACTION = "CONFIGURE_TOTP";
+
     private final KeycloakAdminClient keycloakAdminClient;
     private final ScimClient scimClient;
     private final ProvisioningProperties properties;
@@ -151,10 +153,20 @@ public class AdminUserProvisioningService {
     }
 
     public List<AdminUserResponses.KeycloakUserSummary> search(String search, int first, int max) {
-        return keycloakAdminClient.searchUsers(search, first, max)
-                .stream()
-                .map(this::toKeycloakSummary)
-                .toList();
+        List<AdminUserResponses.KeycloakUserSummary> users = new ArrayList<>();
+        boolean scimAvailable = true;
+        for (KeycloakModels.UserRepresentation user : keycloakAdminClient.searchUsers(search, first, max)) {
+            ScimModels.ScimUserResponse scim = null;
+            if (scimAvailable && user != null && StringUtils.hasText(user.id())) {
+                try {
+                    scim = scimClient.findByExternalId(user.id()).orElse(null);
+                } catch (ProvisioningException exception) {
+                    scimAvailable = false;
+                }
+            }
+            users.add(toKeycloakSummary(user, scim));
+        }
+        return users;
     }
 
     public AdminUserResponses.AdminUserDetailResponse get(String keycloakUserId) {
@@ -164,8 +176,62 @@ public class AdminUserProvisioningService {
                 .orElse(null);
 
         return new AdminUserResponses.AdminUserDetailResponse(
-                toKeycloakSummary(keycloak),
+                toKeycloakSummary(keycloak, null),
                 scim
+        );
+    }
+
+    public AdminUserResponses.UserMaintenanceResponse applyCurrentSettingsToAllUsers() {
+        int requested = 0;
+        int updated = 0;
+        int unchanged = 0;
+        List<String> failedUsers = new ArrayList<>();
+
+        int first = 0;
+        int pageSize = 100;
+        while (true) {
+            List<KeycloakModels.UserRepresentation> users =
+                    keycloakAdminClient.searchUsers(null, first, pageSize);
+            if (users.isEmpty()) {
+                break;
+            }
+
+            for (KeycloakModels.UserRepresentation user : users) {
+                requested++;
+                if (user == null || !StringUtils.hasText(user.id())) {
+                    failedUsers.add("unknown: Keycloak user id가 없습니다.");
+                    continue;
+                }
+
+                List<String> requiredActions = requiredActionsWithDefaults(user.requiredActions());
+                if (requiredActions.equals(safeRequiredActions(user.requiredActions()))) {
+                    unchanged++;
+                    continue;
+                }
+
+                try {
+                    keycloakAdminClient.updateUserProfile(
+                            user.id(),
+                            keycloakMaintenanceRequest(user, requiredActions)
+                    );
+                    updated++;
+                } catch (ProvisioningException exception) {
+                    failedUsers.add(displayFailureUser(user) + ": " + exception.getMessage());
+                }
+            }
+
+            if (users.size() < pageSize) {
+                break;
+            }
+            first += pageSize;
+        }
+
+        return new AdminUserResponses.UserMaintenanceResponse(
+                requested,
+                updated,
+                unchanged,
+                failedUsers,
+                failedUsers.isEmpty() ? "APPLIED" : "PARTIAL"
         );
     }
 
@@ -271,7 +337,7 @@ public class AdminUserProvisioningService {
                 null,
                 username,
                 request.email(),
-                null,
+                request.displayName(),
                 null,
                 request.enabled() == null || request.enabled(),
                 Boolean.TRUE.equals(request.emailVerified()),
@@ -285,7 +351,8 @@ public class AdminUserProvisioningService {
                         request.tenancyName(),
                         employmentStatus(request.enabled(), request.sourceActive())
                 ),
-                credentials(request.password(), request.temporaryPassword())
+                credentials(request.password(), request.temporaryPassword()),
+                requiredOtpAction()
         );
     }
 
@@ -297,7 +364,7 @@ public class AdminUserProvisioningService {
                 null,
                 username,
                 request.email(),
-                null,
+                request.displayName(),
                 null,
                 request.enabled() == null || request.enabled(),
                 Boolean.TRUE.equals(request.emailVerified()),
@@ -311,8 +378,48 @@ public class AdminUserProvisioningService {
                         request.tenancyName(),
                         employmentStatus(request.enabled(), request.sourceActive())
                 ),
-                credentials(request.password(), request.temporaryPassword())
+                credentials(request.password(), request.temporaryPassword()),
+                requiredOtpAction()
         );
+    }
+
+    private List<String> requiredOtpAction() {
+        return List.of(CONFIGURE_TOTP_REQUIRED_ACTION);
+    }
+
+    private List<String> requiredActionsWithDefaults(List<String> currentActions) {
+        Set<String> actions = new LinkedHashSet<>(safeRequiredActions(currentActions));
+        actions.addAll(requiredOtpAction());
+        return new ArrayList<>(actions);
+    }
+
+    private List<String> safeRequiredActions(List<String> currentActions) {
+        return currentActions == null ? List.of() : currentActions;
+    }
+
+    private KeycloakModels.UserRepresentation keycloakMaintenanceRequest(
+            KeycloakModels.UserRepresentation user,
+            List<String> requiredActions
+    ) {
+        return new KeycloakModels.UserRepresentation(
+                user.id(),
+                user.username(),
+                user.email(),
+                user.firstName(),
+                user.lastName(),
+                user.enabled(),
+                user.emailVerified(),
+                user.attributes(),
+                null,
+                requiredActions
+        );
+    }
+
+    private String displayFailureUser(KeycloakModels.UserRepresentation user) {
+        if (StringUtils.hasText(user.username())) {
+            return user.username();
+        }
+        return StringUtils.hasText(user.id()) ? user.id() : "unknown";
     }
 
     private ScimModels.ScimUserRequest toScimRequest(
@@ -466,20 +573,48 @@ public class AdminUserProvisioningService {
     }
 
     private AdminUserResponses.KeycloakUserSummary toKeycloakSummary(
-            KeycloakModels.UserRepresentation user
+            KeycloakModels.UserRepresentation user,
+            ScimModels.ScimUserResponse scim
     ) {
         if (user == null) {
             return null;
         }
+        Map<String, List<String>> attributes = new LinkedHashMap<>();
+        if (user.attributes() != null) {
+            user.attributes().forEach((key, value) ->
+                    attributes.put(key, value == null ? List.of() : new ArrayList<>(value))
+            );
+        }
+
+        String scimDisplayName = scim == null ? null : scim.displayName();
+        String scimEmployeeNumber = scim == null || scim.enterprise() == null
+                ? null
+                : scim.enterprise().employeeNumber();
+        String scimRole = scim == null || scim.erp() == null ? null : scim.erp().role();
+        String scimTenancyType = scim == null || scim.erp() == null ? null : scim.erp().tenancyType();
+        String scimTenancyName = scim == null || scim.erp() == null ? null : scim.erp().tenancyName();
+
+        putAttribute(attributes, "displayName", scimDisplayName);
+        putAttribute(attributes, "name", scimDisplayName);
+        putAttribute(attributes, "employee_number", scimEmployeeNumber);
+        putAttribute(attributes, "employeeNumber", scimEmployeeNumber);
+        putAttribute(attributes, "position", scim == null ? null : scim.title());
+        putAttribute(attributes, "role", scimRole);
+        putAttribute(attributes, "erpRole", scimRole);
+        putAttribute(attributes, "tenancy_type", scimTenancyType);
+        putAttribute(attributes, "tenancyType", scimTenancyType);
+        putAttribute(attributes, "tenancy_name", scimTenancyName);
+        putAttribute(attributes, "tenancyName", scimTenancyName);
+
         return new AdminUserResponses.KeycloakUserSummary(
                 user.id(),
                 user.username(),
                 user.email(),
-                user.firstName(),
+                StringUtils.hasText(scimDisplayName) ? scimDisplayName : user.firstName(),
                 user.lastName(),
                 user.enabled(),
                 user.emailVerified(),
-                user.attributes()
+                attributes
         );
     }
 

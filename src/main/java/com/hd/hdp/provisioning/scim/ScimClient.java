@@ -6,6 +6,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.nio.charset.StandardCharsets;
@@ -35,6 +36,8 @@ public class ScimClient {
             return scimHttpService.create(authHeaders(), request);
         } catch (RestClientResponseException exception) {
             throw upstreamException("SCIM_CREATE_USER_FAILED", "Failed to create SCIM user.", exception);
+        } catch (ResourceAccessException exception) {
+            throw connectionException(exception);
         }
     }
 
@@ -54,6 +57,8 @@ public class ScimClient {
             return Optional.of(response.safeResources().get(0));
         } catch (RestClientResponseException exception) {
             throw upstreamException("SCIM_SEARCH_USER_FAILED", "Failed to search SCIM user.", exception);
+        } catch (ResourceAccessException exception) {
+            throw connectionException(exception);
         }
     }
 
@@ -62,6 +67,8 @@ public class ScimClient {
             return scimHttpService.update(authHeaders(), scimUserId, request);
         } catch (RestClientResponseException exception) {
             throw upstreamException("SCIM_UPDATE_USER_FAILED", "Failed to update SCIM user.", exception);
+        } catch (ResourceAccessException exception) {
+            throw connectionException(exception);
         }
     }
 
@@ -70,6 +77,8 @@ public class ScimClient {
             scimHttpService.delete(authHeaders(), scimUserId);
         } catch (RestClientResponseException exception) {
             throw upstreamException("SCIM_DEACTIVATE_USER_FAILED", "Failed to deactivate SCIM user.", exception);
+        } catch (ResourceAccessException exception) {
+            throw connectionException(exception);
         }
     }
 
@@ -114,6 +123,16 @@ public class ScimClient {
                 status,
                 code,
                 message + " " + upstreamBody(exception),
+                exception
+        );
+    }
+
+    private ProvisioningException connectionException(ResourceAccessException exception) {
+        return new ProvisioningException(
+                HttpStatus.BAD_GATEWAY,
+                "SCIM_CONNECTION_FAILED",
+                "User 서비스 SCIM API에 연결할 수 없습니다. USER_SCIM_BASE_URL="
+                        + properties.getScim().getBaseUrl(),
                 exception
         );
     }

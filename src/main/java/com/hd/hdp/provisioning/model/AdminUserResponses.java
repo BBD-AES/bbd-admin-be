@@ -55,4 +55,13 @@ public final class AdminUserResponses {
             String result
     ) {
     }
+
+    public record UserMaintenanceResponse(
+            int requested,
+            int updated,
+            int unchanged,
+            List<String> failedUsers,
+            String result
+    ) {
+    }
 }

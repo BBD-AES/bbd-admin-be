@@ -28,7 +28,8 @@ public final class KeycloakModels {
             Boolean enabled,
             Boolean emailVerified,
             Map<String, List<String>> attributes,
-            List<CredentialRepresentation> credentials
+            List<CredentialRepresentation> credentials,
+            List<String> requiredActions
     ) {
         public UserRepresentation withoutCredentials() {
             return new UserRepresentation(
@@ -40,7 +41,8 @@ public final class KeycloakModels {
                     enabled,
                     emailVerified,
                     attributes,
-                    null
+                    null,
+                    requiredActions
             );
         }
     }

@@ -51,6 +51,14 @@ public class AdminUserController {
         return provisioningService.createBulk(request);
     }
 
+    @PostMapping("/apply-current-settings")
+    AdminUserResponses.UserMaintenanceResponse applyCurrentSettings(
+            Authentication authentication
+    ) {
+        adminAuthorizationService.requireAdmin(authentication);
+        return provisioningService.applyCurrentSettingsToAllUsers();
+    }
+
     @GetMapping
     List<AdminUserResponses.KeycloakUserSummary> search(
             @RequestParam(required = false) String search,

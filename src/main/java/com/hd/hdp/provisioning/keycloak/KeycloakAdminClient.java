@@ -93,6 +93,19 @@ public class KeycloakAdminClient {
         }
     }
 
+    public void updateUserProfile(String keycloakUserId, KeycloakModels.UserRepresentation request) {
+        try {
+            keycloakAdminHttpService.updateUser(
+                    realm(),
+                    keycloakUserId,
+                    authorization(),
+                    request.withoutCredentials()
+            );
+        } catch (RestClientResponseException exception) {
+            throw upstreamException("KEYCLOAK_UPDATE_USER_FAILED", "Failed to update Keycloak user.", exception);
+        }
+    }
+
     public void disableUser(String keycloakUserId) {
         KeycloakModels.UserRepresentation current = getUser(keycloakUserId);
         updateUser(keycloakUserId, new KeycloakModels.UserRepresentation(
@@ -104,7 +117,8 @@ public class KeycloakAdminClient {
                 false,
                 current.emailVerified(),
                 current.attributes(),
-                null
+                null,
+                current.requiredActions()
         ));
     }
 

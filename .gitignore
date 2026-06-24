@@ -44,4 +44,15 @@ frontend/.env
 
 ### Local env ###
 .env
+*.env
+admin-be.env
 *.log
+
+### Secrets / certificates ###
+*.pem
+*.key
+*.p12
+*.jks
+
+### OS ###
+.DS_Store
