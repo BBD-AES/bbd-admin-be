@@ -225,7 +225,36 @@ public class AdminUserProvisioningService {
         return new AdminUserResponses.NextEmployeeNumberResponse(prefix, nextEmployeeNumberValue(prefix));
     }
 
-    public AdminUserResponses.UserMaintenanceResponse applyCurrentSettingsToAllUsers() {
+    public AdminUserResponses.PasswordLockPolicyResponse passwordLockPolicy() {
+        return toPasswordLockPolicyResponse(keycloakAdminClient.getPasswordLockPolicy());
+    }
+
+    public AdminUserResponses.PasswordLockPolicyResponse updatePasswordLockPolicy(Boolean enabled) {
+        return toPasswordLockPolicyResponse(
+                keycloakAdminClient.updatePasswordLockPolicy(enabled == null || enabled)
+        );
+    }
+
+    public AdminUserResponses.ProvisionedUserResponse unlock(String keycloakUserId) {
+        KeycloakModels.UserRepresentation keycloak = keycloakAdminClient.getUser(keycloakUserId);
+        keycloakAdminClient.unlockUser(keycloakUserId);
+
+        return new AdminUserResponses.ProvisionedUserResponse(
+                keycloakUserId,
+                null,
+                keycloak == null ? null : keycloak.username(),
+                keycloak == null ? null : keycloak.email(),
+                "UNLOCKED"
+        );
+    }
+
+    public AdminUserResponses.UserMaintenanceResponse applyCurrentSettingsToAllUsers(
+            Boolean passwordLockEnabled
+    ) {
+        if (passwordLockEnabled != null) {
+            keycloakAdminClient.updatePasswordLockPolicy(passwordLockEnabled);
+        }
+
         int requested = 0;
         int updated = 0;
         int unchanged = 0;
@@ -276,6 +305,15 @@ public class AdminUserProvisioningService {
                 unchanged,
                 failedUsers,
                 failedUsers.isEmpty() ? "APPLIED" : "PARTIAL"
+        );
+    }
+
+    private AdminUserResponses.PasswordLockPolicyResponse toPasswordLockPolicyResponse(
+            KeycloakModels.PasswordLockPolicy policy
+    ) {
+        return new AdminUserResponses.PasswordLockPolicyResponse(
+                policy.enabled(),
+                policy.failureFactor()
         );
     }
 

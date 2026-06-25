@@ -56,6 +56,12 @@ public final class AdminUserResponses {
     ) {
     }
 
+    public record PasswordLockPolicyResponse(
+            Boolean enabled,
+            Integer failureFactor
+    ) {
+    }
+
     public record BulkProvisionedUsersResponse(
             int requested,
             List<ProvisionedUserResponse> users,

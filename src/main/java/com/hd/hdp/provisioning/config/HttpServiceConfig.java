@@ -1,6 +1,7 @@
 package com.hd.hdp.provisioning.config;
 
 import com.hd.hdp.provisioning.keycloak.KeycloakAdminHttpService;
+import com.hd.hdp.provisioning.keycloak.KeycloakRealmAdminHttpService;
 import com.hd.hdp.provisioning.keycloak.KeycloakTokenHttpService;
 import com.hd.hdp.provisioning.scim.ScimHttpService;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +27,11 @@ public class HttpServiceConfig {
     @Bean
     KeycloakAdminHttpService keycloakAdminHttpService(ProvisioningProperties properties) {
         return httpService(keycloakRestClient(properties), KeycloakAdminHttpService.class);
+    }
+
+    @Bean
+    KeycloakRealmAdminHttpService keycloakRealmAdminHttpService(ProvisioningProperties properties) {
+        return httpService(keycloakRestClient(properties), KeycloakRealmAdminHttpService.class);
     }
 
     @Bean

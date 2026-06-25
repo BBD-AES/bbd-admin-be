@@ -10,21 +10,26 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class KeycloakAdminClient {
 
     private final KeycloakAdminHttpService keycloakAdminHttpService;
+    private final KeycloakRealmAdminHttpService keycloakRealmAdminHttpService;
     private final KeycloakAdminTokenClient tokenClient;
     private final ProvisioningProperties properties;
 
     public KeycloakAdminClient(
             KeycloakAdminHttpService keycloakAdminHttpService,
+            KeycloakRealmAdminHttpService keycloakRealmAdminHttpService,
             KeycloakAdminTokenClient tokenClient,
             ProvisioningProperties properties
     ) {
         this.keycloakAdminHttpService = keycloakAdminHttpService;
+        this.keycloakRealmAdminHttpService = keycloakRealmAdminHttpService;
         this.tokenClient = tokenClient;
         this.properties = properties;
     }
@@ -130,6 +135,47 @@ public class KeycloakAdminClient {
         }
     }
 
+    public KeycloakModels.PasswordLockPolicy getPasswordLockPolicy() {
+        try {
+            Map<String, Object> realm = keycloakRealmAdminHttpService.getRealm(realm(), authorization());
+            return new KeycloakModels.PasswordLockPolicy(
+                    Boolean.TRUE.equals(realm.get("bruteForceProtected")),
+                    integerValue(realm.get("failureFactor"))
+            );
+        } catch (RestClientResponseException exception) {
+            throw upstreamException(
+                    "KEYCLOAK_GET_REALM_FAILED",
+                    "Failed to get Keycloak realm.",
+                    exception
+            );
+        }
+    }
+
+    public KeycloakModels.PasswordLockPolicy updatePasswordLockPolicy(boolean enabled) {
+        try {
+            Map<String, Object> request = new LinkedHashMap<>();
+            request.put("bruteForceProtected", enabled);
+            request.put("permanentLockout", enabled);
+            request.put("failureFactor", 5);
+            keycloakRealmAdminHttpService.updateRealm(realm(), authorization(), request);
+            return new KeycloakModels.PasswordLockPolicy(enabled, 5);
+        } catch (RestClientResponseException exception) {
+            throw upstreamException(
+                    "KEYCLOAK_UPDATE_REALM_FAILED",
+                    "Failed to update Keycloak realm.",
+                    exception
+            );
+        }
+    }
+
+    public void unlockUser(String keycloakUserId) {
+        try {
+            keycloakRealmAdminHttpService.unlockUser(realm(), keycloakUserId, authorization());
+        } catch (RestClientResponseException exception) {
+            throw upstreamException("KEYCLOAK_UNLOCK_USER_FAILED", "Failed to unlock Keycloak user.", exception);
+        }
+    }
+
     private void resetPassword(
             String keycloakUserId,
             KeycloakModels.CredentialRepresentation credential
@@ -178,6 +224,16 @@ public class KeycloakAdminClient {
             return "status=" + exception.getStatusCode().value();
         }
         return body.length() > 500 ? body.substring(0, 500) : body;
+    }
+
+    private Integer integerValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && StringUtils.hasText(text)) {
+            return Integer.parseInt(text);
+        }
+        return null;
     }
 
     private String realm() {

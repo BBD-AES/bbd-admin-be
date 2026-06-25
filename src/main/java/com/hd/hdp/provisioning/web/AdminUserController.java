@@ -54,10 +54,30 @@ public class AdminUserController {
 
     @PostMapping("/apply-current-settings")
     AdminUserResponses.UserMaintenanceResponse applyCurrentSettings(
+            @RequestBody(required = false) AdminUserRequests.ApplyCurrentSettingsRequest request,
             Authentication authentication
     ) {
         adminAuthorizationService.requireAdmin(authentication);
-        return provisioningService.applyCurrentSettingsToAllUsers();
+        return provisioningService.applyCurrentSettingsToAllUsers(
+                request == null ? null : request.passwordLockEnabled()
+        );
+    }
+
+    @GetMapping("/password-lock-policy")
+    AdminUserResponses.PasswordLockPolicyResponse passwordLockPolicy(
+            Authentication authentication
+    ) {
+        adminAuthorizationService.requireAdmin(authentication);
+        return provisioningService.passwordLockPolicy();
+    }
+
+    @PutMapping("/password-lock-policy")
+    AdminUserResponses.PasswordLockPolicyResponse updatePasswordLockPolicy(
+            @RequestBody AdminUserRequests.PasswordLockPolicyRequest request,
+            Authentication authentication
+    ) {
+        adminAuthorizationService.requireAdmin(authentication);
+        return provisioningService.updatePasswordLockPolicy(request.enabled());
     }
 
     @GetMapping
@@ -97,6 +117,15 @@ public class AdminUserController {
     ) {
         adminAuthorizationService.requireAdmin(authentication);
         return provisioningService.update(keycloakUserId, request);
+    }
+
+    @PostMapping("/{keycloakUserId:[0-9a-fA-F-]{36}}/unlock")
+    AdminUserResponses.ProvisionedUserResponse unlock(
+            @PathVariable String keycloakUserId,
+            Authentication authentication
+    ) {
+        adminAuthorizationService.requireAdmin(authentication);
+        return provisioningService.unlock(keycloakUserId);
     }
 
     @DeleteMapping("/{keycloakUserId:[0-9a-fA-F-]{36}}")

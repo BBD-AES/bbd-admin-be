@@ -55,4 +55,14 @@ public final class AdminUserRequests {
             @NotEmpty List<@Valid CreateUserRequest> users
     ) {
     }
+
+    public record ApplyCurrentSettingsRequest(
+            Boolean passwordLockEnabled
+    ) {
+    }
+
+    public record PasswordLockPolicyRequest(
+            Boolean enabled
+    ) {
+    }
 }

@@ -56,4 +56,10 @@ public final class KeycloakModels {
             return new CredentialRepresentation("password", value, temporary);
         }
     }
+
+    public record PasswordLockPolicy(
+            Boolean enabled,
+            Integer failureFactor
+    ) {
+    }
 }
