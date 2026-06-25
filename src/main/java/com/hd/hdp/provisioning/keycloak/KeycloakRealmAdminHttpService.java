@@ -29,6 +29,13 @@ public interface KeycloakRealmAdminHttpService {
             @RequestBody Map<String, Object> request
     );
 
+    @GetExchange("/attack-detection/brute-force/users/{userId}")
+    Map<String, Object> getUserLockStatus(
+            @PathVariable String realm,
+            @PathVariable String userId,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization
+    );
+
     @DeleteExchange("/attack-detection/brute-force/users/{userId}")
     ResponseEntity<Void> unlockUser(
             @PathVariable String realm,

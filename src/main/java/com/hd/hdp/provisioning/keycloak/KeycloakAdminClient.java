@@ -168,6 +168,22 @@ public class KeycloakAdminClient {
         }
     }
 
+    public KeycloakModels.UserLockStatus getUserLockStatus(String keycloakUserId) {
+        try {
+            Map<String, Object> status =
+                    keycloakRealmAdminHttpService.getUserLockStatus(realm(), keycloakUserId, authorization());
+            boolean locked = Boolean.TRUE.equals(status.get("disabled"))
+                    || Boolean.TRUE.equals(status.get("locked"));
+            return new KeycloakModels.UserLockStatus(locked, integerValue(status.get("numFailures")));
+        } catch (RestClientResponseException exception) {
+            throw upstreamException(
+                    "KEYCLOAK_GET_USER_LOCK_STATUS_FAILED",
+                    "Failed to get Keycloak user lock status.",
+                    exception
+            );
+        }
+    }
+
     public void unlockUser(String keycloakUserId) {
         try {
             keycloakRealmAdminHttpService.unlockUser(realm(), keycloakUserId, authorization());

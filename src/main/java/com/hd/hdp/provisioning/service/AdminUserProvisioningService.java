@@ -214,7 +214,8 @@ public class AdminUserProvisioningService {
 
         return new AdminUserResponses.AdminUserDetailResponse(
                 toKeycloakSummary(keycloak, null),
-                scim
+                scim,
+                lockStatus(keycloakUserId)
         );
     }
 
@@ -315,6 +316,15 @@ public class AdminUserProvisioningService {
                 policy.enabled(),
                 policy.failureFactor()
         );
+    }
+
+    private AdminUserResponses.UserLockStatusResponse lockStatus(String keycloakUserId) {
+        try {
+            KeycloakModels.UserLockStatus status = keycloakAdminClient.getUserLockStatus(keycloakUserId);
+            return new AdminUserResponses.UserLockStatusResponse(status.locked(), status.numFailures());
+        } catch (ProvisioningException exception) {
+            return null;
+        }
     }
 
     private String compensateCreatedKeycloakUser(String keycloakUserId) {

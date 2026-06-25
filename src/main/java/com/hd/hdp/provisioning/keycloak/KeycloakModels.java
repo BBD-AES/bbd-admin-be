@@ -62,4 +62,10 @@ public final class KeycloakModels {
             Integer failureFactor
     ) {
     }
+
+    public record UserLockStatus(
+            Boolean locked,
+            Integer numFailures
+    ) {
+    }
 }

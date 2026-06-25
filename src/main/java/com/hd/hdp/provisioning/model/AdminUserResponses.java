@@ -19,7 +19,8 @@ public final class AdminUserResponses {
 
     public record AdminUserDetailResponse(
             KeycloakUserSummary keycloak,
-            ScimUserSummary scim
+            ScimUserSummary scim,
+            UserLockStatusResponse lockStatus
     ) {
     }
 
@@ -59,6 +60,12 @@ public final class AdminUserResponses {
     public record PasswordLockPolicyResponse(
             Boolean enabled,
             Integer failureFactor
+    ) {
+    }
+
+    public record UserLockStatusResponse(
+            Boolean locked,
+            Integer numFailures
     ) {
     }
 
