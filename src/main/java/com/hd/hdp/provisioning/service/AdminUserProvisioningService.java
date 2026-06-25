@@ -42,6 +42,7 @@ public class AdminUserProvisioningService {
     }
 
     public AdminUserResponses.ProvisionedUserResponse create(AdminUserRequests.CreateUserRequest request) {
+        applyPasswordLockPolicy(request.passwordLockEnabled());
         validatePasswordPolicy(request.password());
         boolean autoEmployeeNumber =
                 (request.autoEmployeeNumber() == null || request.autoEmployeeNumber())
@@ -104,11 +105,12 @@ public class AdminUserProvisioningService {
     ) {
         List<AdminUserRequests.CreateUserRequest> users = request.users();
         validateBulkUsers(users);
+        applyPasswordLockPolicy(request.passwordLockEnabled());
 
         List<AdminUserResponses.ProvisionedUserResponse> created = new ArrayList<>();
         try {
             for (AdminUserRequests.CreateUserRequest user : users) {
-                created.add(create(user));
+                created.add(create(withoutPasswordLockPolicy(user)));
             }
 
             return new AdminUserResponses.BulkProvisionedUsersResponse(
@@ -134,6 +136,7 @@ public class AdminUserProvisioningService {
             String keycloakUserId,
             AdminUserRequests.UpdateUserRequest request
     ) {
+        applyPasswordLockPolicy(request.passwordLockEnabled());
         if (StringUtils.hasText(request.password())) {
             validatePasswordPolicy(request.password());
         }
@@ -233,6 +236,35 @@ public class AdminUserProvisioningService {
     public AdminUserResponses.PasswordLockPolicyResponse updatePasswordLockPolicy(Boolean enabled) {
         return toPasswordLockPolicyResponse(
                 keycloakAdminClient.updatePasswordLockPolicy(enabled == null || enabled)
+        );
+    }
+
+    private void applyPasswordLockPolicy(Boolean enabled) {
+        if (enabled != null) {
+            keycloakAdminClient.updatePasswordLockPolicy(enabled);
+        }
+    }
+
+    private AdminUserRequests.CreateUserRequest withoutPasswordLockPolicy(
+            AdminUserRequests.CreateUserRequest request
+    ) {
+        return new AdminUserRequests.CreateUserRequest(
+                request.email(),
+                request.displayName(),
+                request.password(),
+                request.temporaryPassword(),
+                request.enabled(),
+                request.emailVerified(),
+                request.employeeNumber(),
+                request.autoEmployeeNumber(),
+                request.position(),
+                request.role(),
+                request.tenancyType(),
+                request.tenancyName(),
+                request.sourceActive(),
+                request.requireTotp(),
+                null,
+                request.attributes()
         );
     }
 
@@ -398,6 +430,7 @@ public class AdminUserProvisioningService {
                 request.tenancyName(),
                 request.sourceActive(),
                 request.requireTotp(),
+                request.passwordLockEnabled(),
                 request.attributes()
         );
     }
@@ -852,7 +885,8 @@ public class AdminUserProvisioningService {
                 user.enabled(),
                 user.emailVerified(),
                 attributes,
-                safeRequiredActions(user.requiredActions())
+                safeRequiredActions(user.requiredActions()),
+                lockStatus(user.id())
         );
     }
 

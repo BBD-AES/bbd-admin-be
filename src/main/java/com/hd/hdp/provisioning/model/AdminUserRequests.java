@@ -29,6 +29,7 @@ public final class AdminUserRequests {
             @NotBlank String tenancyName,
             Boolean sourceActive,
             Boolean requireTotp,
+            Boolean passwordLockEnabled,
             Map<String, List<String>> attributes
     ) {
     }
@@ -47,12 +48,14 @@ public final class AdminUserRequests {
             @NotBlank String tenancyName,
             Boolean sourceActive,
             Boolean requireTotp,
+            Boolean passwordLockEnabled,
             Map<String, List<String>> attributes
     ) {
     }
 
     public record BulkCreateUsersRequest(
-            @NotEmpty List<@Valid CreateUserRequest> users
+            @NotEmpty List<@Valid CreateUserRequest> users,
+            Boolean passwordLockEnabled
     ) {
     }
 

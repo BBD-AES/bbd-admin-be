@@ -33,7 +33,8 @@ public final class AdminUserResponses {
             Boolean enabled,
             Boolean emailVerified,
             Map<String, List<String>> attributes,
-            List<String> requiredActions
+            List<String> requiredActions,
+            UserLockStatusResponse lockStatus
     ) {
     }
 

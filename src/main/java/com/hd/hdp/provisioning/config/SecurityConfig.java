@@ -168,7 +168,8 @@ public class SecurityConfig {
                 "Authorization",
                 "Content-Type",
                 "X-Requested-With",
-                "X-XSRF-TOKEN"
+                "X-XSRF-TOKEN",
+                "Idempotency-Key"
         ));
         config.setAllowCredentials(true);
 

@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class ScimClient {
@@ -33,7 +34,7 @@ public class ScimClient {
 
     public ScimModels.ScimUserResponse create(ScimModels.ScimUserRequest request) {
         try {
-            return scimHttpService.create(authHeaders(), request);
+            return scimHttpService.create(mutationHeaders(), request);
         } catch (RestClientResponseException exception) {
             throw upstreamException("SCIM_CREATE_USER_FAILED", "Failed to create SCIM user.", exception);
         } catch (ResourceAccessException exception) {
@@ -64,7 +65,7 @@ public class ScimClient {
 
     public ScimModels.ScimUserResponse update(String scimUserId, ScimModels.ScimUserRequest request) {
         try {
-            return scimHttpService.update(authHeaders(), scimUserId, request);
+            return scimHttpService.update(mutationHeaders(), scimUserId, request);
         } catch (RestClientResponseException exception) {
             throw upstreamException("SCIM_UPDATE_USER_FAILED", "Failed to update SCIM user.", exception);
         } catch (ResourceAccessException exception) {
@@ -74,7 +75,7 @@ public class ScimClient {
 
     public void deactivate(String scimUserId) {
         try {
-            scimHttpService.delete(authHeaders(), scimUserId);
+            scimHttpService.delete(mutationHeaders(), scimUserId);
         } catch (RestClientResponseException exception) {
             throw upstreamException("SCIM_DEACTIVATE_USER_FAILED", "Failed to deactivate SCIM user.", exception);
         } catch (ResourceAccessException exception) {
@@ -103,6 +104,12 @@ public class ScimClient {
             case MTLS, NONE -> {
             }
         }
+        return headers;
+    }
+
+    private Map<String, String> mutationHeaders() {
+        Map<String, String> headers = authHeaders();
+        headers.put("Idempotency-Key", UUID.randomUUID().toString());
         return headers;
     }
 
