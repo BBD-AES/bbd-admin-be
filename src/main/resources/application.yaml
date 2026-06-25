@@ -64,7 +64,7 @@ hdp:
       token-cache-skew-seconds: ${KEYCLOAK_TOKEN_CACHE_SKEW_SECONDS:30}
 
     scim:
-      base-url: ${USER_SCIM_BASE_URL:http://localhost:8080/user}
+      base-url: ${USER_SCIM_BASE_URL:https://bbd.inwoohub.com/user}
       auth-mode: ${USER_SCIM_AUTH_MODE:NONE}
       bearer-token: ${USER_SCIM_BEARER_TOKEN:}
       basic-username: ${USER_SCIM_BASIC_USERNAME:}

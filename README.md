@@ -62,16 +62,16 @@ After login, Spring Security redirects back to the frontend. API calls use the b
 
 ## SCIM
 
-`USER_SCIM_BASE_URL` should point at the ERP user service root, for example:
+`USER_SCIM_BASE_URL` should point at the ERP user service root through the gateway, for example:
 
 ```text
-USER_SCIM_BASE_URL=http://localhost:8080/user
+USER_SCIM_BASE_URL=https://bbd.inwoohub.com/user
 ```
 
 The backend calls:
 
 ```text
-/user/scim/v2/Users
+https://bbd.inwoohub.com/user/scim/v2/Users
 ```
 
 For local development, `USER_SCIM_AUTH_MODE=NONE` is convenient. For integrated environments, use the mode expected by the user service, usually `MTLS` or `CLIENT_CREDENTIALS`.
