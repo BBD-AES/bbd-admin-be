@@ -21,12 +21,14 @@ public final class AdminUserRequests {
             Boolean temporaryPassword,
             Boolean enabled,
             Boolean emailVerified,
-            @NotBlank String employeeNumber,
+            String employeeNumber,
+            Boolean autoEmployeeNumber,
             @NotBlank String position,
             @NotNull ProvisioningEnums.UserRole role,
             @NotNull ProvisioningEnums.TenancyType tenancyType,
             @NotBlank String tenancyName,
             Boolean sourceActive,
+            Boolean requireTotp,
             Map<String, List<String>> attributes
     ) {
     }
@@ -44,6 +46,7 @@ public final class AdminUserRequests {
             @NotNull ProvisioningEnums.TenancyType tenancyType,
             @NotBlank String tenancyName,
             Boolean sourceActive,
+            Boolean requireTotp,
             Map<String, List<String>> attributes
     ) {
     }

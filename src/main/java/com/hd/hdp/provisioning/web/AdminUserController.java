@@ -2,6 +2,7 @@ package com.hd.hdp.provisioning.web;
 
 import com.hd.hdp.provisioning.model.AdminUserRequests;
 import com.hd.hdp.provisioning.model.AdminUserResponses;
+import com.hd.hdp.provisioning.model.ProvisioningEnums;
 import com.hd.hdp.provisioning.security.AdminAuthorizationService;
 import com.hd.hdp.provisioning.service.AdminUserProvisioningService;
 import jakarta.validation.Valid;
@@ -68,6 +69,15 @@ public class AdminUserController {
     ) {
         adminAuthorizationService.requireAdmin(authentication);
         return provisioningService.search(search, first, max);
+    }
+
+    @GetMapping("/next-employee-number")
+    AdminUserResponses.NextEmployeeNumberResponse nextEmployeeNumber(
+            @RequestParam ProvisioningEnums.UserRole role,
+            Authentication authentication
+    ) {
+        adminAuthorizationService.requireAdmin(authentication);
+        return provisioningService.nextEmployeeNumber(role);
     }
 
     @GetMapping("/{keycloakUserId:[0-9a-fA-F-]{36}}")

@@ -31,7 +31,8 @@ public final class AdminUserResponses {
             String lastName,
             Boolean enabled,
             Boolean emailVerified,
-            Map<String, List<String>> attributes
+            Map<String, List<String>> attributes,
+            List<String> requiredActions
     ) {
     }
 
@@ -46,6 +47,12 @@ public final class AdminUserResponses {
             String tenancyType,
             String tenancyName,
             Boolean active
+    ) {
+    }
+
+    public record NextEmployeeNumberResponse(
+            String prefix,
+            String nextNumber
     ) {
     }
 

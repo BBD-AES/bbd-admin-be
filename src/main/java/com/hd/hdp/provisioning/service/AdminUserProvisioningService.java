@@ -6,6 +6,7 @@ import com.hd.hdp.provisioning.keycloak.KeycloakAdminClient;
 import com.hd.hdp.provisioning.keycloak.KeycloakModels;
 import com.hd.hdp.provisioning.model.AdminUserRequests;
 import com.hd.hdp.provisioning.model.AdminUserResponses;
+import com.hd.hdp.provisioning.model.ProvisioningEnums;
 import com.hd.hdp.provisioning.scim.ScimClient;
 import com.hd.hdp.provisioning.scim.ScimModels;
 import org.springframework.http.HttpStatus;
@@ -18,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class AdminUserProvisioningService {
@@ -40,30 +43,60 @@ public class AdminUserProvisioningService {
 
     public AdminUserResponses.ProvisionedUserResponse create(AdminUserRequests.CreateUserRequest request) {
         validatePasswordPolicy(request.password());
-        String username = loginId(request.employeeNumber());
-        KeycloakModels.UserRepresentation keycloakRequest = toKeycloakRequest(request, username);
-        String keycloakUserId = keycloakAdminClient.createUser(keycloakRequest);
+        boolean autoEmployeeNumber =
+                (request.autoEmployeeNumber() == null || request.autoEmployeeNumber())
+                        && !StringUtils.hasText(request.employeeNumber());
+        String autoPrefix = autoEmployeeNumber ? employeeNumberPrefix(request.role()) : null;
+        int maxAttempts = autoEmployeeNumber ? 3 : 1;
+        ProvisioningException lastConflict = null;
 
-        try {
-            ScimModels.ScimUserResponse scim = scimClient.create(toScimRequest(keycloakUserId, request, username));
-            return new AdminUserResponses.ProvisionedUserResponse(
-                    keycloakUserId,
-                    scim == null ? null : scim.id(),
-                    username,
-                    request.email(),
-                    "CREATED"
-            );
-        } catch (ProvisioningException exception) {
-            String compensation = compensateCreatedKeycloakUser(keycloakUserId);
-            throw new ProvisioningException(
-                    HttpStatus.BAD_GATEWAY,
-                    "SCIM_CREATE_FAILED_AFTER_KEYCLOAK_CREATE",
-                    "Keycloak 사용자는 생성됐지만 SCIM 사용자 생성이 실패했습니다. compensation=" + compensation
-                            + ", keycloakUserId=" + keycloakUserId
-                            + ", cause=" + exception.getMessage(),
-                    exception
-            );
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            AdminUserRequests.CreateUserRequest resolvedRequest = autoEmployeeNumber
+                    ? withEmployeeNumber(request, nextEmployeeNumberValue(autoPrefix))
+                    : withResolvedEmployeeNumber(request);
+            String username = loginId(resolvedRequest.employeeNumber());
+            KeycloakModels.UserRepresentation keycloakRequest = toKeycloakRequest(resolvedRequest, username);
+            String keycloakUserId;
+            try {
+                keycloakUserId = keycloakAdminClient.createUser(keycloakRequest);
+            } catch (ProvisioningException exception) {
+                if (autoEmployeeNumber && exception.getStatus() == HttpStatus.CONFLICT) {
+                    lastConflict = exception;
+                    continue;
+                }
+                throw exception;
+            }
+
+            try {
+                ScimModels.ScimUserResponse scim =
+                        scimClient.create(toScimRequest(keycloakUserId, resolvedRequest, username));
+                return new AdminUserResponses.ProvisionedUserResponse(
+                        keycloakUserId,
+                        scim == null ? null : scim.id(),
+                        username,
+                        resolvedRequest.email(),
+                        "CREATED"
+                );
+            } catch (ProvisioningException exception) {
+                String compensation = compensateCreatedKeycloakUser(keycloakUserId);
+                throw new ProvisioningException(
+                        HttpStatus.BAD_GATEWAY,
+                        "SCIM_CREATE_FAILED_AFTER_KEYCLOAK_CREATE",
+                        "Keycloak 사용자는 생성됐지만 SCIM 사용자 생성이 실패했습니다. compensation=" + compensation
+                                + ", keycloakUserId=" + keycloakUserId
+                                + ", cause=" + exception.getMessage(),
+                        exception
+                );
+            }
         }
+
+        throw lastConflict == null
+                ? new ProvisioningException(
+                        HttpStatus.CONFLICT,
+                        "EMPLOYEE_NUMBER_AUTO_ISSUE_FAILED",
+                        "자동 사번 발급에 실패했습니다."
+                )
+                : lastConflict;
     }
 
     public AdminUserResponses.BulkProvisionedUsersResponse createBulk(
@@ -105,7 +138,11 @@ public class AdminUserProvisioningService {
             validatePasswordPolicy(request.password());
         }
         String username = loginId(request.employeeNumber());
-        keycloakAdminClient.updateUser(keycloakUserId, toKeycloakRequest(request, username));
+        KeycloakModels.UserRepresentation current = keycloakAdminClient.getUser(keycloakUserId);
+        keycloakAdminClient.updateUser(
+                keycloakUserId,
+                toKeycloakRequest(request, username, current.requiredActions())
+        );
 
         try {
             ScimModels.ScimUserRequest scimRequest = toScimRequest(keycloakUserId, request, username);
@@ -179,6 +216,13 @@ public class AdminUserProvisioningService {
                 toKeycloakSummary(keycloak, null),
                 scim
         );
+    }
+
+    public AdminUserResponses.NextEmployeeNumberResponse nextEmployeeNumber(
+            ProvisioningEnums.UserRole role
+    ) {
+        String prefix = employeeNumberPrefix(role);
+        return new AdminUserResponses.NextEmployeeNumberResponse(prefix, nextEmployeeNumberValue(prefix));
     }
 
     public AdminUserResponses.UserMaintenanceResponse applyCurrentSettingsToAllUsers() {
@@ -277,6 +321,133 @@ public class AdminUserProvisioningService {
         }
     }
 
+    private AdminUserRequests.CreateUserRequest withResolvedEmployeeNumber(
+            AdminUserRequests.CreateUserRequest request
+    ) {
+        if (StringUtils.hasText(request.employeeNumber())) {
+            return withEmployeeNumber(request, request.employeeNumber().trim());
+        }
+
+        return withEmployeeNumber(request, loginId(request.employeeNumber()));
+    }
+
+    private AdminUserRequests.CreateUserRequest withEmployeeNumber(
+            AdminUserRequests.CreateUserRequest request,
+            String employeeNumber
+    ) {
+        return new AdminUserRequests.CreateUserRequest(
+                request.email(),
+                request.displayName(),
+                request.password(),
+                request.temporaryPassword(),
+                request.enabled(),
+                request.emailVerified(),
+                employeeNumber,
+                request.autoEmployeeNumber(),
+                request.position(),
+                request.role(),
+                request.tenancyType(),
+                request.tenancyName(),
+                request.sourceActive(),
+                request.requireTotp(),
+                request.attributes()
+        );
+    }
+
+    private String nextEmployeeNumberValue(String prefix) {
+        int first = 0;
+        int pageSize = 100;
+        int maxNumber = 0;
+        int maxWidth = 3;
+
+        while (true) {
+            List<KeycloakModels.UserRepresentation> users =
+                    keycloakAdminClient.searchUsers(null, first, pageSize);
+            if (users.isEmpty()) {
+                break;
+            }
+
+            for (KeycloakModels.UserRepresentation user : users) {
+                NumberToken token = employeeNumberToken(prefix, user);
+                if (token == null) {
+                    continue;
+                }
+                if (token.number() > maxNumber) {
+                    maxNumber = token.number();
+                    maxWidth = token.width();
+                } else if (token.number() == maxNumber) {
+                    maxWidth = Math.max(maxWidth, token.width());
+                }
+            }
+
+            if (users.size() < pageSize) {
+                break;
+            }
+            first += pageSize;
+        }
+
+        return prefix + String.format("%0" + Math.max(3, maxWidth) + "d", maxNumber + 1);
+    }
+
+    private NumberToken employeeNumberToken(
+            String prefix,
+            KeycloakModels.UserRepresentation user
+    ) {
+        if (user == null) {
+            return null;
+        }
+
+        List<String> candidates = new ArrayList<>();
+        candidates.add(user.username());
+        addAttributeValues(candidates, user.attributes(), "employee_number");
+        addAttributeValues(candidates, user.attributes(), "employeeNumber");
+
+        Pattern pattern = Pattern.compile("^" + Pattern.quote(prefix) + "(\\d+)$", Pattern.CASE_INSENSITIVE);
+        NumberToken best = null;
+        for (String candidate : candidates) {
+            if (!StringUtils.hasText(candidate)) {
+                continue;
+            }
+            Matcher matcher = pattern.matcher(candidate.trim());
+            if (!matcher.matches()) {
+                continue;
+            }
+
+            String digits = matcher.group(1);
+            NumberToken token = new NumberToken(Integer.parseInt(digits), digits.length());
+            if (best == null || token.number() > best.number()) {
+                best = token;
+            }
+        }
+        return best;
+    }
+
+    private void addAttributeValues(
+            List<String> candidates,
+            Map<String, List<String>> attributes,
+            String key
+    ) {
+        if (attributes == null || attributes.get(key) == null) {
+            return;
+        }
+        candidates.addAll(attributes.get(key));
+    }
+
+    private String employeeNumberPrefix(ProvisioningEnums.UserRole role) {
+        return switch (role) {
+            case HQ_MANAGER, HQ_STAFF -> "HQ";
+            case BRANCH_MANAGER, BRANCH_STAFF -> "BR";
+            case ADMIN -> throw new ProvisioningException(
+                    HttpStatus.BAD_REQUEST,
+                    "EMPLOYEE_NUMBER_AUTO_ISSUE_UNSUPPORTED_ROLE",
+                    "전체 관리자는 자동 사번 발급 대상이 아닙니다."
+            );
+        };
+    }
+
+    private record NumberToken(int number, int width) {
+    }
+
     private void validatePasswordPolicy(String password) {
         List<String> violations = new ArrayList<>();
         String value = password == null ? "" : password.trim();
@@ -352,13 +523,14 @@ public class AdminUserProvisioningService {
                         employmentStatus(request.enabled(), request.sourceActive())
                 ),
                 credentials(request.password(), request.temporaryPassword()),
-                requiredOtpAction()
+                requiredActionsForCreate(request.requireTotp())
         );
     }
 
     private KeycloakModels.UserRepresentation toKeycloakRequest(
             AdminUserRequests.UpdateUserRequest request,
-            String username
+            String username,
+            List<String> currentActions
     ) {
         return new KeycloakModels.UserRepresentation(
                 null,
@@ -379,12 +551,29 @@ public class AdminUserProvisioningService {
                         employmentStatus(request.enabled(), request.sourceActive())
                 ),
                 credentials(request.password(), request.temporaryPassword()),
-                requiredOtpAction()
+                requiredActionsForUpdate(currentActions, request.requireTotp())
         );
     }
 
     private List<String> requiredOtpAction() {
         return List.of(CONFIGURE_TOTP_REQUIRED_ACTION);
+    }
+
+    private List<String> requiredActionsForCreate(Boolean requireTotp) {
+        return Boolean.FALSE.equals(requireTotp) ? List.of() : requiredOtpAction();
+    }
+
+    private List<String> requiredActionsForUpdate(
+            List<String> currentActions,
+            Boolean requireTotp
+    ) {
+        Set<String> actions = new LinkedHashSet<>(safeRequiredActions(currentActions));
+        if (Boolean.FALSE.equals(requireTotp)) {
+            actions.remove(CONFIGURE_TOTP_REQUIRED_ACTION);
+        } else {
+            actions.add(CONFIGURE_TOTP_REQUIRED_ACTION);
+        }
+        return new ArrayList<>(actions);
     }
 
     private List<String> requiredActionsWithDefaults(List<String> currentActions) {
@@ -614,7 +803,8 @@ public class AdminUserProvisioningService {
                 user.lastName(),
                 user.enabled(),
                 user.emailVerified(),
-                attributes
+                attributes,
+                safeRequiredActions(user.requiredActions())
         );
     }
 
