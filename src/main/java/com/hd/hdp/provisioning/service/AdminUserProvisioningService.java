@@ -18,6 +18,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -147,8 +148,14 @@ public class AdminUserProvisioningService {
         }
 
         try {
-            ScimModels.ScimUserRequest scimRequest = toScimRequest(keycloakUserId, request, username);
-            ScimModels.ScimUserResponse scim = scimClient.findByExternalId(keycloakUserId)
+            Optional<ScimModels.ScimUserResponse> existingScim = scimClient.findByExternalId(keycloakUserId);
+            ScimModels.ScimUserRequest scimRequest = toScimRequest(
+                    keycloakUserId,
+                    request,
+                    username,
+                    sourceActiveForUpdate(existingScim.orElse(null))
+            );
+            ScimModels.ScimUserResponse scim = existingScim
                     .map(existing -> scimClient.update(existing.id(), scimRequest))
                     .orElseGet(() -> scimClient.create(scimRequest));
 
@@ -179,10 +186,7 @@ public class AdminUserProvisioningService {
         }
 
         String scimUserId = scimClient.findByExternalId(keycloakUserId)
-                .map(scim -> {
-                    scimClient.deactivate(scim.id());
-                    return scim.id();
-                })
+                .map(ScimModels.ScimUserResponse::id)
                 .orElse(null);
 
         return new AdminUserResponses.ProvisionedUserResponse(
@@ -741,7 +745,8 @@ public class AdminUserProvisioningService {
     private ScimModels.ScimUserRequest toScimRequest(
             String keycloakUserId,
             AdminUserRequests.UpdateUserRequest request,
-            String username
+            String username,
+            Boolean sourceActive
     ) {
         return scimRequest(
                 keycloakUserId,
@@ -753,8 +758,15 @@ public class AdminUserProvisioningService {
                 request.role().name(),
                 request.tenancyType().name(),
                 request.tenancyName(),
-                request.sourceActive()
+                sourceActive
         );
+    }
+
+    private Boolean sourceActiveForUpdate(ScimModels.ScimUserResponse existingScim) {
+        if (existingScim != null && existingScim.active() != null) {
+            return existingScim.active();
+        }
+        return true;
     }
 
     private ScimModels.ScimUserRequest scimRequest(
