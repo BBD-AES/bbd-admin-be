@@ -140,10 +140,11 @@ public class AdminUserProvisioningService {
         }
         String username = loginId(request.employeeNumber());
         KeycloakModels.UserRepresentation current = keycloakAdminClient.getUser(keycloakUserId);
-        keycloakAdminClient.updateUser(
-                keycloakUserId,
-                toKeycloakRequest(request, username, current.requiredActions(), current.attributes())
-        );
+        KeycloakModels.UserRepresentation keycloakRequest =
+                toKeycloakRequest(request, username, current.requiredActions(), current.attributes());
+        if (shouldUpdateKeycloakUser(keycloakUserId, current, request)) {
+            keycloakAdminClient.updateUser(keycloakUserId, keycloakRequest);
+        }
 
         try {
             ScimModels.ScimUserRequest scimRequest = toScimRequest(keycloakUserId, request, username);
@@ -638,6 +639,25 @@ public class AdminUserProvisioningService {
                 credentials(request.password(), request.temporaryPassword()),
                 requiredActionsForUpdate(currentActions, request.requireTotp())
         );
+    }
+
+    private boolean shouldUpdateKeycloakUser(
+            String keycloakUserId,
+            KeycloakModels.UserRepresentation current,
+            AdminUserRequests.UpdateUserRequest request
+    ) {
+        AdminUserResponses.UserLockStatusResponse status = lockStatus(keycloakUserId);
+        if (!Boolean.TRUE.equals(status == null ? null : status.locked())) {
+            return true;
+        }
+        if (StringUtils.hasText(request.password())) {
+            return true;
+        }
+        return !enabledValue(current.enabled()).equals(enabledValue(request.enabled()));
+    }
+
+    private Boolean enabledValue(Boolean enabled) {
+        return enabled == null || enabled;
     }
 
     private Map<String, List<String>> mergeAttributes(
