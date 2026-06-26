@@ -27,6 +27,8 @@ import java.util.regex.Pattern;
 public class AdminUserProvisioningService {
 
     private static final String CONFIGURE_TOTP_REQUIRED_ACTION = "CONFIGURE_TOTP";
+    private static final String EMPLOYMENT_STATUS_ATTRIBUTE = "employment_status";
+    private static final String DEFAULT_EMPLOYMENT_STATUS = "ACTIVE";
 
     private final KeycloakAdminClient keycloakAdminClient;
     private final ScimClient scimClient;
@@ -849,6 +851,7 @@ public class AdminUserProvisioningService {
         putAttribute(attributes, "position", position);
         putAttribute(attributes, "role", role);
         putAttribute(attributes, "erpRole", role);
+        putDefaultAttribute(attributes, EMPLOYMENT_STATUS_ATTRIBUTE, DEFAULT_EMPLOYMENT_STATUS);
         putAttribute(attributes, "tenancy_type", tenancyType);
         putAttribute(attributes, "tenancyType", tenancyType);
         putAttribute(attributes, "tenancy_name", tenancyName);
@@ -860,6 +863,20 @@ public class AdminUserProvisioningService {
         if (StringUtils.hasText(value)) {
             attributes.put(key, new ArrayList<>(List.of(value)));
         }
+    }
+
+    private void putDefaultAttribute(Map<String, List<String>> attributes, String key, String value) {
+        if (!hasAttributeValue(attributes, key)) {
+            putAttribute(attributes, key, value);
+        }
+    }
+
+    private boolean hasAttributeValue(Map<String, List<String>> attributes, String key) {
+        List<String> values = attributes.get(key);
+        if (values == null || values.isEmpty()) {
+            return false;
+        }
+        return values.stream().anyMatch(StringUtils::hasText);
     }
 
     private String displayName(
