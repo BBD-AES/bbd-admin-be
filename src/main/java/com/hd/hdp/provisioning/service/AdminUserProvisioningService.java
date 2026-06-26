@@ -42,7 +42,6 @@ public class AdminUserProvisioningService {
     }
 
     public AdminUserResponses.ProvisionedUserResponse create(AdminUserRequests.CreateUserRequest request) {
-        applyPasswordLockPolicy(request.passwordLockEnabled());
         validatePasswordPolicy(request.password());
         boolean autoEmployeeNumber =
                 (request.autoEmployeeNumber() == null || request.autoEmployeeNumber())
@@ -136,7 +135,6 @@ public class AdminUserProvisioningService {
             String keycloakUserId,
             AdminUserRequests.UpdateUserRequest request
     ) {
-        applyPasswordLockPolicy(request.passwordLockEnabled());
         if (StringUtils.hasText(request.password())) {
             validatePasswordPolicy(request.password());
         }
@@ -144,7 +142,7 @@ public class AdminUserProvisioningService {
         KeycloakModels.UserRepresentation current = keycloakAdminClient.getUser(keycloakUserId);
         keycloakAdminClient.updateUser(
                 keycloakUserId,
-                toKeycloakRequest(request, username, current.requiredActions())
+                toKeycloakRequest(request, username, current.requiredActions(), current.attributes())
         );
 
         try {
@@ -617,7 +615,8 @@ public class AdminUserProvisioningService {
     private KeycloakModels.UserRepresentation toKeycloakRequest(
             AdminUserRequests.UpdateUserRequest request,
             String username,
-            List<String> currentActions
+            List<String> currentActions,
+            Map<String, List<String>> currentAttributes
     ) {
         return new KeycloakModels.UserRepresentation(
                 null,
@@ -628,7 +627,7 @@ public class AdminUserProvisioningService {
                 request.enabled() == null || request.enabled(),
                 Boolean.TRUE.equals(request.emailVerified()),
                 attributes(
-                        request.attributes(),
+                        mergeAttributes(currentAttributes, request.attributes()),
                         request.displayName(),
                         request.employeeNumber(),
                         request.position(),
@@ -639,6 +638,20 @@ public class AdminUserProvisioningService {
                 credentials(request.password(), request.temporaryPassword()),
                 requiredActionsForUpdate(currentActions, request.requireTotp())
         );
+    }
+
+    private Map<String, List<String>> mergeAttributes(
+            Map<String, List<String>> currentAttributes,
+            Map<String, List<String>> requestAttributes
+    ) {
+        Map<String, List<String>> merged = new LinkedHashMap<>();
+        if (currentAttributes != null) {
+            merged.putAll(currentAttributes);
+        }
+        if (requestAttributes != null) {
+            merged.putAll(requestAttributes);
+        }
+        return merged;
     }
 
     private List<String> requiredOtpAction() {
@@ -808,7 +821,6 @@ public class AdminUserProvisioningService {
         if (requestAttributes != null) {
             attributes.putAll(requestAttributes);
         }
-        attributes.remove("employment_status");
         putAttribute(attributes, "displayName", displayName);
         putAttribute(attributes, "name", displayName);
         putAttribute(attributes, "employee_number", employeeNumber);
