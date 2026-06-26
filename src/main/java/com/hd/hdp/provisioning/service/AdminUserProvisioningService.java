@@ -284,8 +284,14 @@ public class AdminUserProvisioningService {
     public AdminUserResponses.UserMaintenanceResponse applyCurrentSettingsToAllUsers(
             Boolean passwordLockEnabled
     ) {
+        List<String> warnings = new ArrayList<>();
         if (passwordLockEnabled != null) {
-            keycloakAdminClient.updatePasswordLockPolicy(passwordLockEnabled);
+            try {
+                keycloakAdminClient.updatePasswordLockPolicy(passwordLockEnabled);
+            } catch (ProvisioningException exception) {
+                warnings.add("Keycloak realm 권한 부족으로 5회 실패 잠금 정책은 적용되지 않았습니다. "
+                        + "서비스 계정에 realm-management manage-realm 권한을 부여한 뒤 다시 시도하세요.");
+            }
         }
 
         int requested = 0;
@@ -337,6 +343,7 @@ public class AdminUserProvisioningService {
                 updated,
                 unchanged,
                 failedUsers,
+                warnings,
                 failedUsers.isEmpty() ? "APPLIED" : "PARTIAL"
         );
     }
@@ -600,8 +607,7 @@ public class AdminUserProvisioningService {
                         request.position(),
                         request.role().name(),
                         request.tenancyType().name(),
-                        request.tenancyName(),
-                        employmentStatus(request.enabled(), request.sourceActive())
+                        request.tenancyName()
                 ),
                 credentials(request.password(), request.temporaryPassword()),
                 requiredActionsForCreate(request.requireTotp())
@@ -628,8 +634,7 @@ public class AdminUserProvisioningService {
                         request.position(),
                         request.role().name(),
                         request.tenancyType().name(),
-                        request.tenancyName(),
-                        employmentStatus(request.enabled(), request.sourceActive())
+                        request.tenancyName()
                 ),
                 credentials(request.password(), request.temporaryPassword()),
                 requiredActionsForUpdate(currentActions, request.requireTotp())
@@ -797,13 +802,13 @@ public class AdminUserProvisioningService {
             String position,
             String role,
             String tenancyType,
-            String tenancyName,
-            String employmentStatus
+            String tenancyName
     ) {
         Map<String, List<String>> attributes = new LinkedHashMap<>();
         if (requestAttributes != null) {
             attributes.putAll(requestAttributes);
         }
+        attributes.remove("employment_status");
         putAttribute(attributes, "displayName", displayName);
         putAttribute(attributes, "name", displayName);
         putAttribute(attributes, "employee_number", employeeNumber);
@@ -815,14 +820,7 @@ public class AdminUserProvisioningService {
         putAttribute(attributes, "tenancyType", tenancyType);
         putAttribute(attributes, "tenancy_name", tenancyName);
         putAttribute(attributes, "tenancyName", tenancyName);
-        putAttribute(attributes, "employment_status", employmentStatus);
         return attributes;
-    }
-
-    private String employmentStatus(Boolean enabled, Boolean sourceActive) {
-        return Boolean.FALSE.equals(enabled) || Boolean.FALSE.equals(sourceActive)
-                ? "INACTIVE"
-                : "ACTIVE";
     }
 
     private void putAttribute(Map<String, List<String>> attributes, String key, String value) {

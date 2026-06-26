@@ -82,6 +82,7 @@ public final class AdminUserResponses {
             int updated,
             int unchanged,
             List<String> failedUsers,
+            List<String> warnings,
             String result
     ) {
     }
