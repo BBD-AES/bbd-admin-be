@@ -142,7 +142,7 @@ public class AdminUserProvisioningService {
         KeycloakModels.UserRepresentation current = keycloakAdminClient.getUser(keycloakUserId);
         KeycloakModels.UserRepresentation keycloakRequest =
                 toKeycloakRequest(request, username, current.requiredActions(), current.attributes());
-        if (shouldUpdateKeycloakUser(keycloakUserId, current, request)) {
+        if (shouldUpdateKeycloakUser(keycloakUserId)) {
             keycloakAdminClient.updateUser(keycloakUserId, keycloakRequest);
         }
 
@@ -173,7 +173,10 @@ public class AdminUserProvisioningService {
 
     public AdminUserResponses.ProvisionedUserResponse deactivate(String keycloakUserId) {
         KeycloakModels.UserRepresentation keycloak = keycloakAdminClient.getUser(keycloakUserId);
-        keycloakAdminClient.disableUser(keycloakUserId);
+        AdminUserResponses.UserLockStatusResponse status = lockStatus(keycloakUserId);
+        if (!Boolean.TRUE.equals(status == null ? null : status.locked())) {
+            keycloakAdminClient.disableUser(keycloakUserId);
+        }
 
         String scimUserId = scimClient.findByExternalId(keycloakUserId)
                 .map(scim -> {
@@ -641,23 +644,9 @@ public class AdminUserProvisioningService {
         );
     }
 
-    private boolean shouldUpdateKeycloakUser(
-            String keycloakUserId,
-            KeycloakModels.UserRepresentation current,
-            AdminUserRequests.UpdateUserRequest request
-    ) {
+    private boolean shouldUpdateKeycloakUser(String keycloakUserId) {
         AdminUserResponses.UserLockStatusResponse status = lockStatus(keycloakUserId);
-        if (!Boolean.TRUE.equals(status == null ? null : status.locked())) {
-            return true;
-        }
-        if (StringUtils.hasText(request.password())) {
-            return true;
-        }
-        return !enabledValue(current.enabled()).equals(enabledValue(request.enabled()));
-    }
-
-    private Boolean enabledValue(Boolean enabled) {
-        return enabled == null || enabled;
+        return !Boolean.TRUE.equals(status == null ? null : status.locked());
     }
 
     private Map<String, List<String>> mergeAttributes(
